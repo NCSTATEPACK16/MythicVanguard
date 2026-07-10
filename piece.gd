@@ -10,6 +10,14 @@ var is_dragging: bool = false
 var start_pos: Vector2
 var current_grid_pos: Vector2i = Vector2i(-1, -1)
 
+# Last two moves ({"from": Vector2i, "to": Vector2i}), newest last. Two-square rule.
+var move_history: Array = []
+
+func record_move(from: Vector2i, to: Vector2i):
+	move_history.append({"from": from, "to": to})
+	if move_history.size() > 2:
+		move_history.pop_front()
+
 const PLAYER_COLOR = Color(0.45, 0.62, 0.95)
 const ENEMY_COLOR = Color(0.95, 0.45, 0.4)
 const HIDDEN_COLOR = Color(0.32, 0.2, 0.26)

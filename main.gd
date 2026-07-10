@@ -591,7 +591,21 @@ func _calculate_valid_moves(piece) -> Array:
 						moves.append(current_check)
 				else:
 					moves.append(current_check)
+
+	var banned = _banned_square(piece)
+	if banned.x >= 0:
+		moves.erase(banned)
 	return moves
+
+func _banned_square(piece) -> Vector2i:
+	# Two-square rule: last move was the exact reverse of the one before it →
+	# the piece may not immediately return to where it just came from.
+	if piece.move_history.size() >= 2:
+		var prev = piece.move_history[0]
+		var last = piece.move_history[1]
+		if last["from"] == prev["to"] and last["to"] == prev["from"]:
+			return last["from"]
+	return Vector2i(-1, -1)
 
 func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 	GameManager.current_state = GameManager.GameState.ANIMATING
@@ -602,6 +616,7 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 	grid[old_pos.x][old_pos.y] = null
 	last_move_from = old_pos
 	last_move_to = target_pos
+	piece_to_move.record_move(old_pos, target_pos)
 
 	selected_piece = null
 	valid_moves.clear()
@@ -797,5 +812,24 @@ func _debug_rules_test():
 	_rt_assert(rc.call("Guard", "Knight") == "defender_wins", "lower rank loses")
 	_rt_assert(rc.call("Knight", "Guard") == "attacker_wins", "higher rank wins")
 	_rt_assert(rc.call("Assassin", "Warlord") == "defender_wins", "assassin only beats champion")
+
+	# Two-square rule: after A→B, B→A the piece may not immediately return to B.
+	var kn = _spawn_piece(GameManager.Team.PLAYER, "Knight", Vector2i(0, 6))
+	kn.move_history = [
+		{"from": Vector2i(0, 6), "to": Vector2i(0, 7)},
+		{"from": Vector2i(0, 7), "to": Vector2i(0, 6)},
+	]
+	var kn_moves = _calculate_valid_moves(kn)
+	_rt_assert(not Vector2i(0, 7) in kn_moves, "two-square rule bans third shuttle")
+	_rt_assert(Vector2i(1, 6) in kn_moves, "two-square rule leaves other moves legal")
+	# Non-oscillating history does not ban anything.
+	grid[0][6] = null
+	grid[0][7] = kn
+	kn.current_grid_pos = Vector2i(0, 7)
+	kn.move_history = [
+		{"from": Vector2i(1, 6), "to": Vector2i(0, 6)},
+		{"from": Vector2i(0, 6), "to": Vector2i(0, 7)},
+	]
+	_rt_assert(Vector2i(0, 6) in _calculate_valid_moves(kn), "non-oscillating history does not ban")
 
 	_rt_finish()
