@@ -1,0 +1,21 @@
+# Godot 4+ specific ignores
+.godot/
+*.import
+export.cfg
+
+# Web export output (rebuild with: godot --headless --export-release Web build/index.html)
+build/
+
+# Imported translations (if not stored directly as CSV)
+*.translation
+
+# Mono-specific ignores
+.mono/
+data_*/
+mono_crash.*.json
+
+# System/tool-specific ignores
+.DS_Store
+Thumbs.db
+*.bak
+*~

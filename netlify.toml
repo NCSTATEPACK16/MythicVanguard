@@ -1,0 +1,11 @@
+# Required headers for Godot 4 HTML5 (WebAssembly) Exports
+# This ensures SharedArrayBuffer is available by establishing Cross-Origin Isolation
+
+[build]
+  publish = "build"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "require-corp"
