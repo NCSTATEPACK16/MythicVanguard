@@ -5,7 +5,7 @@ func _ready():
 	var args = OS.get_cmdline_user_args()
 	if "--screenshot-title" in args:
 		_debug_screenshot()
-	elif "--screenshot" in args or "--autodeploy" in args:
+	elif "--screenshot" in args or "--autodeploy" in args or "--rulestest" in args:
 		get_tree().change_scene_to_file.call_deferred("res://main.tscn")
 		return
 

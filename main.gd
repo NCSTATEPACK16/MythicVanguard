@@ -47,6 +47,8 @@ func _ready():
 	queue_redraw()
 	if "--screenshot" in OS.get_cmdline_user_args():
 		_debug_screenshot()
+	if "--rulestest" in OS.get_cmdline_user_args():
+		_debug_rules_test.call_deferred()
 
 # Dev helper: `godot --path . -- --screenshot [--autodeploy] [--aitest]` saves a
 # PNG of the running game to user://screenshot.png and quits.
@@ -759,3 +761,41 @@ func _show_victory_screen(player_won: bool):
 			var colors = [Color.RED, Color.GREEN, Color.CORNFLOWER_BLUE, Color.GOLD, Color.PURPLE]
 			confetti.color = colors[i % colors.size()]
 			$CanvasLayer.add_child(confetti)
+
+# ---------------------------------------------------------------- rules test
+# `godot --headless --path . -- --rulestest` asserts the ruleset and quits
+# with a non-zero exit code on any failure.
+var _rt_failures: int = 0
+
+func _rt_assert(cond: bool, name: String):
+	if cond:
+		print("[rulestest] PASS: ", name)
+	else:
+		_rt_failures += 1
+		printerr("[rulestest] FAIL: ", name)
+
+func _rt_finish():
+	if _rt_failures == 0:
+		print("[rulestest] ALL PASSED")
+	else:
+		printerr("[rulestest] %d FAILURES" % _rt_failures)
+	get_tree().quit(0 if _rt_failures == 0 else 1)
+
+func _debug_rules_test():
+	var P = GameManager.Team.PLAYER
+	var E = GameManager.Team.ENEMY
+	var rc = func(a, d):
+		return GameManager.resolve_combat(
+			GameManager.create_piece_data(P, a), GameManager.create_piece_data(E, d))
+
+	_rt_assert(rc.call("Assassin", "Champion") == "attacker_wins", "assassin beats champion attacking")
+	_rt_assert(rc.call("Champion", "Assassin") == "attacker_wins", "champion beats assassin")
+	_rt_assert(rc.call("Rogue", "Ward") == "attacker_wins", "rogue disarms ward")
+	_rt_assert(rc.call("Champion", "Ward") == "defender_wins", "ward beats champion")
+	_rt_assert(rc.call("Knight", "Relic") == "game_over", "relic capture ends game")
+	_rt_assert(rc.call("Knight", "Knight") == "draw", "equal ranks draw")
+	_rt_assert(rc.call("Guard", "Knight") == "defender_wins", "lower rank loses")
+	_rt_assert(rc.call("Knight", "Guard") == "attacker_wins", "higher rank wins")
+	_rt_assert(rc.call("Assassin", "Warlord") == "defender_wins", "assassin only beats champion")
+
+	_rt_finish()
