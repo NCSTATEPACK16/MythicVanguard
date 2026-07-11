@@ -1,11 +1,34 @@
 extends RefCounted
 
-# Heuristic AI. Plays fair: it only acts on ranks of player pieces whose
-# is_revealed flag is set (revealed in a past combat, which is exactly the
-# information a human opponent would remember).
+# Heuristic AI. Plays fair: it only acts on ranks of player pieces it has
+# seen in a past combat, held in its own memory rather than the visual
+# is_revealed flag (which now only flashes briefly). Hard AI never forgets;
+# easy AI rolls to forget each remembered piece every turn, so it may well
+# probe a piece that already beat it.
+
+const EASY_FORGET_CHANCE = 0.25
+
+# Player PieceData instance ids whose rank the AI has seen in combat.
+var _known_ranks := {}
+
+func observe_combat(attacker_data, defender_data) -> void:
+	for data in [attacker_data, defender_data]:
+		if data.team == GameManager.Team.PLAYER:
+			_known_ranks[data.get_instance_id()] = true
+
+func knows_rank(data) -> bool:
+	return _known_ranks.has(data.get_instance_id())
+
+func _decay_memory() -> void:
+	if GameManager.ai_difficulty == "hard":
+		return
+	for key in _known_ranks.keys():
+		if randf() < EASY_FORGET_CHANCE:
+			_known_ranks.erase(key)
 
 # Returns {"piece": ..., "target": Vector2i} or {} if no move exists.
 func choose_move(main) -> Dictionary:
+	_decay_memory()
 	var relic_pos = _find_own_relic(main)
 	var best = {}
 	var best_score = -INF
@@ -30,7 +53,7 @@ func _score_move(main, piece, target: Vector2i, relic_pos: Vector2i) -> float:
 
 	var defender = main._piece_at(target)
 	if defender:
-		if defender.data.is_revealed:
+		if knows_rank(defender.data):
 			match GameManager.resolve_combat(piece.data, defender.data):
 				"game_over":
 					score += 1000.0

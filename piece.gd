@@ -48,6 +48,22 @@ func initialize(piece_data: PieceData):
 	if is_inside_tree():
 		_update_visuals()
 
+# Show the real rank for a moment (combat reveal), then hide it again so the
+# opponent has to remember what they saw. Overlapping flashes extend the
+# reveal instead of cutting it short.
+var _reveal_gen: int = 0
+
+func flash_reveal(duration: float):
+	_reveal_gen += 1
+	var gen = _reveal_gen
+	data.is_revealed = true
+	_update_visuals()
+	await get_tree().create_timer(duration).timeout
+	if _reveal_gen != gen:
+		return
+	data.is_revealed = false
+	_update_visuals()
+
 func _update_visuals():
 	if data.is_revealed or data.team == PieceData.Team.PLAYER:
 		icon.texture = data.texture
