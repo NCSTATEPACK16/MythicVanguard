@@ -40,6 +40,9 @@ var history_scroll: ScrollContainer
 var move_number: int = 0
 var rules_overlay: PanelContainer
 
+var attack_confirm_overlay: ColorRect
+var attack_confirm_label: Label
+
 var _pulse_time: float = 0.0
 
 func _ready():
@@ -51,6 +54,7 @@ func _ready():
 	_build_banner()
 	_build_history_panel()
 	_build_rules_overlay()
+	_build_attack_confirm()
 	captured_counts = {GameManager.Team.PLAYER: {}, GameManager.Team.ENEMY: {}}
 	pool_counts = GameManager.REQUIRED_PIECES.duplicate()
 	_refresh_tray()
@@ -486,7 +490,7 @@ func _build_rules_overlay():
 
 	vbox.add_child(HSeparator.new())
 	var core = Label.new()
-	core.text = "Move one tile up/down/left/right (Runner: any clear distance).\nAttack by moving onto an enemy — higher rank wins, equal ranks both fall,\nand both pieces are revealed. You can't shuttle between the same two\ntiles three moves running. If you have no legal moves, you lose."
+	core.text = "Move one tile up/down/left/right (Runner: any clear distance).\nNo piece may pass over another piece or cross the chasms.\nAttack by moving onto an adjacent enemy — you'll be asked to confirm.\nHigher rank wins, equal ranks both fall, and both pieces are revealed.\nYou can't shuttle between the same two tiles three moves running.\nIf you have no legal moves, you lose."
 	core.add_theme_font_size_override("font_size", 16)
 	core.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(core)
@@ -496,6 +500,73 @@ func _build_rules_overlay():
 	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	close.pressed.connect(func(): rules_overlay.visible = false)
 	vbox.add_child(close)
+
+func _build_attack_confirm():
+	# Full-rect dimmer that swallows clicks so the board is blocked while
+	# the confirmation is up (works for both mouse and touch).
+	attack_confirm_overlay = ColorRect.new()
+	attack_confirm_overlay.color = Color(0, 0, 0, 0.35)
+	attack_confirm_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	attack_confirm_overlay.visible = false
+	ui.add_child(attack_confirm_overlay)
+
+	var panel = PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.offset_left = -230
+	panel.offset_right = 230
+	panel.offset_top = -120
+	panel.offset_bottom = 120
+	var sb = StyleBoxFlat.new()
+	sb.bg_color = Color(0.08, 0.09, 0.13, 0.97)
+	sb.set_corner_radius_all(12)
+	sb.set_content_margin_all(24)
+	sb.border_color = Color(0.95, 0.35, 0.25)
+	sb.set_border_width_all(2)
+	panel.add_theme_stylebox_override("panel", sb)
+	attack_confirm_overlay.add_child(panel)
+
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 20)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	panel.add_child(vbox)
+
+	attack_confirm_label = Label.new()
+	attack_confirm_label.text = "Attack?"
+	attack_confirm_label.add_theme_font_size_override("font_size", 32)
+	attack_confirm_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(attack_confirm_label)
+
+	var hbox = HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 24)
+	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_child(hbox)
+
+	var yes = Button.new()
+	yes.text = "Yes"
+	yes.custom_minimum_size = Vector2(150, 60)
+	yes.add_theme_font_size_override("font_size", 26)
+	yes.pressed.connect(_on_attack_confirmed)
+	hbox.add_child(yes)
+
+	var cancel = Button.new()
+	cancel.text = "Cancel"
+	cancel.custom_minimum_size = Vector2(150, 60)
+	cancel.add_theme_font_size_override("font_size", 26)
+	cancel.pressed.connect(_on_attack_canceled)
+	hbox.add_child(cancel)
+
+func _on_attack_confirmed():
+	attack_confirm_overlay.visible = false
+	if selected_piece and armed_attack.x >= 0 and armed_attack in valid_moves:
+		_execute_move(selected_piece, armed_attack, true)
+	else:
+		armed_attack = Vector2i(-1, -1)
+		queue_redraw()
+
+func _on_attack_canceled():
+	attack_confirm_overlay.visible = false
+	armed_attack = Vector2i(-1, -1)
+	queue_redraw()
 
 func _coord(pos: Vector2i) -> String:
 	return "%s%d" % [char(65 + pos.x), BOARD_SIZE - pos.y]
@@ -567,7 +638,7 @@ func _draw():
 				draw_circle(center, 13.0, Color(0.95, 0.92, 0.55, pulse))
 
 		if armed_attack.x >= 0:
-			# Crossed swords: click again to confirm the attack
+			# Crossed swords mark the attack awaiting confirmation
 			var c = _tile_center(armed_attack)
 			var s = 18.0
 			draw_line(c + Vector2(-s, -s), c + Vector2(s, s), Color(1.0, 0.3, 0.2, 0.95), 6.0)
@@ -807,14 +878,12 @@ func _on_piece_clicked(piece):
 		queue_redraw()
 	elif piece.data.team == GameManager.Team.ENEMY:
 		if selected_piece and piece.current_grid_pos in valid_moves:
-			# First click arms the attack, second click confirms it.
-			if armed_attack == piece.current_grid_pos:
-				armed_attack = Vector2i(-1, -1)
-				_execute_move(selected_piece, piece.current_grid_pos, true)
-			else:
-				armed_attack = piece.current_grid_pos
-				GameManager.play_sfx("select")
-				queue_redraw()
+			# Ask for confirmation before the attack lands (misclick/mistap guard).
+			armed_attack = piece.current_grid_pos
+			GameManager.play_sfx("select")
+			queue_redraw()
+			attack_confirm_label.text = "%s → %s\nAttack?" % [selected_piece.data.type, _coord(armed_attack)]
+			attack_confirm_overlay.visible = true
 
 func _unhandled_input(event):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -826,9 +895,6 @@ func _unhandled_input(event):
 		if GameManager.current_state == GameManager.GameState.SETUP:
 			_try_deploy_at(target)
 		elif GameManager.current_state == GameManager.GameState.PLAYER_TURN:
-			if armed_attack.x >= 0 and target != armed_attack:
-				armed_attack = Vector2i(-1, -1)
-				queue_redraw()
 			if selected_piece and target in valid_moves and _piece_at(target) == null:
 				_execute_move(selected_piece, target, true)
 
@@ -1126,6 +1192,25 @@ func _debug_rules_test():
 		{"from": Vector2i(0, 6), "to": Vector2i(0, 7)},
 	]
 	_rt_assert(Vector2i(0, 6) in _calculate_valid_moves(kn), "non-oscillating history does not ban")
+
+	# Piece clicks must actually be wired up (regression: signal was never connected).
+	_rt_assert(kn.input_event.is_connected(kn._on_input_event), "piece click signal connected")
+
+	# Movement blocking: no jumping over pieces, no crossing chasms,
+	# and an adjacent enemy shows up as an attackable square.
+	var rn = _spawn_piece(GameManager.Team.PLAYER, "Runner", Vector2i(0, 9))
+	var rn_moves = _calculate_valid_moves(rn)
+	_rt_assert(Vector2i(0, 8) in rn_moves, "runner reaches first clear tile")
+	_rt_assert(not Vector2i(0, 7) in rn_moves, "runner blocked by own piece")
+	_rt_assert(not Vector2i(0, 6) in rn_moves, "runner cannot jump over a piece")
+
+	var rn2 = _spawn_piece(GameManager.Team.PLAYER, "Runner", Vector2i(2, 6))
+	var rn2_moves = _calculate_valid_moves(rn2)
+	_rt_assert(not Vector2i(2, 5) in rn2_moves, "chasm blocks movement")
+	_rt_assert(not Vector2i(2, 4) in rn2_moves, "runner cannot cross the chasm")
+
+	var sc = _spawn_piece(GameManager.Team.PLAYER, "Scout", Vector2i(5, 4))
+	_rt_assert(Vector2i(5, 3) in _calculate_valid_moves(sc), "adjacent enemy is attackable")
 
 	# Stalemate detection: only immobile pieces left = no moves. Clears the
 	# board, so these assertions must stay last.

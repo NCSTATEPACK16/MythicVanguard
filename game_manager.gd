@@ -36,6 +36,7 @@ func save_settings():
 	cfg.load(SETTINGS_PATH)  # ignore error: file may not exist yet
 	cfg.set_value("options", "ai_difficulty", ai_difficulty)
 	cfg.set_value("options", "fast_anim", fast_anim)
+	cfg.set_value("options", "muted", muted)
 	cfg.save(SETTINGS_PATH)
 
 func _load_settings():
@@ -43,6 +44,7 @@ func _load_settings():
 	if cfg.load(SETTINGS_PATH) == OK:
 		ai_difficulty = cfg.get_value("options", "ai_difficulty", "easy")
 		fast_anim = cfg.get_value("options", "fast_anim", false)
+		muted = cfg.get_value("options", "muted", false)
 
 func _ready():
 	_load_settings()
@@ -57,6 +59,7 @@ func _ready():
 	_music_player.bus = "Music"
 	_music_player.volume_db = -10.0
 	add_child(_music_player)
+	_apply_mute()
 
 # Must only be called after a user interaction (browser autoplay rules).
 func start_music():
@@ -73,8 +76,13 @@ func play_sfx(sfx_name: String):
 
 func toggle_mute() -> bool:
 	muted = not muted
-	AudioServer.set_bus_mute(0, muted)
+	_apply_mute()
+	save_settings()
 	return muted
+
+func _apply_mute():
+	for i in range(AudioServer.bus_count):
+		AudioServer.set_bus_mute(i, muted)
 
 const RANKS = {
 	"Champion": 10,

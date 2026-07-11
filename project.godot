@@ -18,6 +18,12 @@ config/name="Mythic Vanguard"
 run/main_scene="res://title.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 
+[audio]
+
+; Web exports default to "sample" playback which bypasses the audio bus
+; system entirely — bus mute/volume would have no effect in the browser.
+general/default_playback_type.web=1
+
 [display]
 
 window/size/viewport_width=1920

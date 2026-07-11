@@ -29,6 +29,7 @@ const ICON_DARK = Color(0.08, 0.08, 0.14)
 @onready var visuals = $Visuals
 
 func _ready():
+	input_event.connect(_on_input_event)
 	if data:
 		_update_visuals()
 	_start_idle_breathe()
