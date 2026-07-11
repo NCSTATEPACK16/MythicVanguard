@@ -38,6 +38,7 @@ var history_panel: PanelContainer
 var history_list: VBoxContainer
 var history_scroll: ScrollContainer
 var move_number: int = 0
+var rules_overlay: PanelContainer
 
 var _pulse_time: float = 0.0
 
@@ -49,6 +50,7 @@ func _ready():
 	_build_captured_panel()
 	_build_banner()
 	_build_history_panel()
+	_build_rules_overlay()
 	captured_counts = {GameManager.Team.PLAYER: {}, GameManager.Team.ENEMY: {}}
 	pool_counts = GameManager.REQUIRED_PIECES.duplicate()
 	_refresh_tray()
@@ -74,6 +76,8 @@ func _debug_screenshot():
 	if "--victory" in args:
 		GameManager.current_state = GameManager.GameState.GAME_OVER
 		_show_victory_screen(true)
+	if "--rulesoverlay" in args:
+		rules_overlay.visible = true
 	await get_tree().create_timer(1.0).timeout
 	await RenderingServer.frame_post_draw
 	var img = get_viewport().get_texture().get_image()
@@ -237,6 +241,16 @@ func _build_deploy_tray():
 	mute_btn.pressed.connect(func():
 		mute_btn.text = "Unmute Sound" if GameManager.toggle_mute() else "Mute Sound")
 	ui.add_child(mute_btn)
+
+	var rules_btn = Button.new()
+	rules_btn.text = "Rules ?"
+	rules_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	rules_btn.offset_left = -160
+	rules_btn.offset_right = -20
+	rules_btn.offset_top = 65
+	rules_btn.offset_bottom = 100
+	rules_btn.pressed.connect(func(): rules_overlay.visible = not rules_overlay.visible)
+	ui.add_child(rules_btn)
 
 func _rank_display(type: String) -> String:
 	if type == "Ward":
@@ -420,6 +434,68 @@ func _build_history_panel():
 	history_list = VBoxContainer.new()
 	history_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	history_scroll.add_child(history_list)
+
+const RULES_LINES = [
+	["10  Champion ×1", "Strongest — falls only to the Assassin's strike"],
+	["9  Warlord ×1", ""],
+	["8  Commander ×2", ""],
+	["7  Captain ×3", ""],
+	["6  Knight ×4", ""],
+	["5  Guard ×4", ""],
+	["4  Scout ×4", ""],
+	["3  Rogue ×5", "The only piece that can disarm Wards"],
+	["2  Runner ×8", "Moves any distance in a straight line"],
+	["1  Assassin ×1", "Defeats the Champion — but only when attacking"],
+	["W  Ward ×6", "Immobile — destroys any attacker except the Rogue"],
+	["R  Relic ×1", "Immobile — capture the enemy's Relic to win"],
+]
+
+func _build_rules_overlay():
+	rules_overlay = PanelContainer.new()
+	rules_overlay.set_anchors_preset(Control.PRESET_CENTER)
+	rules_overlay.offset_left = -420
+	rules_overlay.offset_right = 420
+	rules_overlay.offset_top = -400
+	rules_overlay.offset_bottom = 400
+	rules_overlay.visible = false
+	var sb = StyleBoxFlat.new()
+	sb.bg_color = Color(0.08, 0.09, 0.13, 0.97)
+	sb.set_corner_radius_all(12)
+	sb.set_content_margin_all(24)
+	sb.border_color = Color(0.85, 0.7, 0.3)
+	sb.set_border_width_all(2)
+	rules_overlay.add_theme_stylebox_override("panel", sb)
+	ui.add_child(rules_overlay)
+
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 6)
+	rules_overlay.add_child(vbox)
+
+	var title = Label.new()
+	title.text = "Ranks & Rules"
+	title.add_theme_font_size_override("font_size", 30)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title)
+	vbox.add_child(HSeparator.new())
+
+	for line in RULES_LINES:
+		var row = Label.new()
+		row.text = line[0] + ("   — " + line[1] if line[1] != "" else "")
+		row.add_theme_font_size_override("font_size", 18)
+		vbox.add_child(row)
+
+	vbox.add_child(HSeparator.new())
+	var core = Label.new()
+	core.text = "Move one tile up/down/left/right (Runner: any clear distance).\nAttack by moving onto an enemy — higher rank wins, equal ranks both fall,\nand both pieces are revealed. You can't shuttle between the same two\ntiles three moves running. If you have no legal moves, you lose."
+	core.add_theme_font_size_override("font_size", 16)
+	core.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(core)
+
+	var close = Button.new()
+	close.text = "Close"
+	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	close.pressed.connect(func(): rules_overlay.visible = false)
+	vbox.add_child(close)
 
 func _coord(pos: Vector2i) -> String:
 	return "%s%d" % [char(65 + pos.x), BOARD_SIZE - pos.y]

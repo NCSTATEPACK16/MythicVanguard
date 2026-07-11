@@ -41,15 +41,23 @@ func _score_move(main, piece, target: Vector2i, relic_pos: Vector2i) -> float:
 				"draw":
 					score += _piece_value(defender.data) - _piece_value(piece.data)
 		else:
-			# Unknown defender: probe with expendable pieces, never with leaders
+			# Unknown defender: probe with expendable pieces, never with leaders.
+			# On hard, use the public has_moved fact: a piece that has moved can
+			# never be a Ward or the Relic, so probing it risks less.
+			var could_be_ward = not defender.data.has_moved
 			if piece.data.type == "Runner":
 				score += 2.0
 			elif piece.data.type == "Assassin":
 				score -= 4.0
+			elif piece.data.type == "Rogue" and hard and could_be_ward:
+				score += 1.6  # Rogues are exactly who should test suspected Wards
 			elif piece.data.rank <= 4:
 				score += 0.8
 			elif piece.data.rank >= 8:
-				score -= 5.0 if hard else 3.0
+				if hard and not could_be_ward:
+					score -= 1.0  # no Ward risk; a leader may bully a mover
+				else:
+					score -= 5.0 if hard else 3.0
 	else:
 		# Advance toward the player's side of the board
 		if target.y > piece.current_grid_pos.y:

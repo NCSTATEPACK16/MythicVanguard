@@ -25,6 +25,10 @@ window/size/viewport_height=1080
 window/stretch/mode="canvas_items"
 window/stretch/aspect="keep"
 
+[input_devices]
+
+pointing/emulate_mouse_from_touch=true
+
 [rendering]
 
 environment/defaults/default_clear_color=Color(0.09, 0.1, 0.14, 1)
