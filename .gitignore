@@ -3,8 +3,9 @@
 *.import
 export.cfg
 
-# Web export output (rebuild with: godot --headless --export-release Web build/index.html)
-build/
+# Web export output is COMMITTED so Netlify can publish it as static files.
+# Rebuild with: godot --headless --export-release Web build/index.html
+# (.import artifacts inside build/ stay ignored via *.import above)
 
 # Imported translations (if not stored directly as CSV)
 *.translation
