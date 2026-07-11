@@ -21,6 +21,9 @@ var PieceScene = preload("res://piece.tscn")
 var ExplosionScene = preload("res://explosion.tscn")
 var ai = preload("res://ai_controller.gd").new()
 
+# How long a rank stays visible after a combat before hiding again.
+const COMBAT_REVEAL_TIME = 2.0
+
 @onready var camera = $Camera2D
 @onready var ui = $CanvasLayer/UI
 @onready var current_turn_label = $CanvasLayer/UI/CurrentTurnLabel
@@ -988,11 +991,12 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 		bump_tween.tween_property(piece_to_move, "global_position", halfway_pos, GameManager.anim_time(0.2)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		await bump_tween.finished
 
-		# Reveal pieces
-		target_tile.data.is_revealed = true
-		target_tile._update_visuals()
-		piece_to_move.data.is_revealed = true
-		piece_to_move._update_visuals()
+		# Reveal both ranks for a moment only; they hide again after the
+		# flash, so players have to remember what they saw. The AI records
+		# what it just learned in its own memory.
+		target_tile.flash_reveal(COMBAT_REVEAL_TIME)
+		piece_to_move.flash_reveal(COMBAT_REVEAL_TIME)
+		ai.observe_combat(piece_to_move.data, target_tile.data)
 		_show_combat_result(piece_to_move.data, target_tile.data, result)
 		_log_move(is_player, old_pos, target_pos, piece_to_move.data, target_tile.data, result)
 
@@ -1174,6 +1178,22 @@ func _debug_rules_test():
 	_rt_assert(rc.call("Knight", "Guard") == "attacker_wins", "higher rank wins")
 	_rt_assert(rc.call("Assassin", "Warlord") == "defender_wins", "assassin only beats champion")
 
+	# AI memory: ranks seen in combat are remembered per difficulty.
+	# Hard never forgets; easy rolls to forget each piece every turn.
+	var seen = GameManager.create_piece_data(P, "Knight")
+	var old_diff = GameManager.ai_difficulty
+	GameManager.ai_difficulty = "hard"
+	ai.observe_combat(seen, GameManager.create_piece_data(E, "Guard"))
+	_rt_assert(ai.knows_rank(seen), "AI remembers player rank after combat")
+	for i in range(50):
+		ai._decay_memory()
+	_rt_assert(ai.knows_rank(seen), "hard AI never forgets")
+	GameManager.ai_difficulty = "easy"
+	for i in range(200):
+		ai._decay_memory()
+	_rt_assert(not ai.knows_rank(seen), "easy AI eventually forgets")
+	GameManager.ai_difficulty = old_diff
+
 	# Two-square rule: after A→B, B→A the piece may not immediately return to B.
 	var kn = _spawn_piece(GameManager.Team.PLAYER, "Knight", Vector2i(0, 6))
 	kn.move_history = [
@@ -1225,5 +1245,20 @@ func _debug_rules_test():
 	_rt_assert(not _team_has_moves(GameManager.Team.PLAYER), "immobile-only army has no moves")
 	_spawn_piece(GameManager.Team.PLAYER, "Knight", Vector2i(5, 5))
 	_rt_assert(_team_has_moves(GameManager.Team.PLAYER), "mobile piece restores moves")
+
+	# Combat reveal is temporary: the rank flashes, then hides again.
+	var fr = _spawn_piece(GameManager.Team.ENEMY, "Guard", Vector2i(8, 0))
+	fr.flash_reveal(0.1)
+	_rt_assert(fr.data.is_revealed, "combat flash shows the rank")
+	await get_tree().create_timer(0.3).timeout
+	_rt_assert(not fr.data.is_revealed, "combat flash hides the rank again")
+	# A flash that starts during an earlier one extends the reveal.
+	fr.flash_reveal(0.1)
+	await get_tree().create_timer(0.05).timeout
+	fr.flash_reveal(0.3)
+	await get_tree().create_timer(0.15).timeout
+	_rt_assert(fr.data.is_revealed, "overlapping flash keeps the rank shown")
+	await get_tree().create_timer(0.3).timeout
+	_rt_assert(not fr.data.is_revealed, "extended flash still hides in the end")
 
 	_rt_finish()
