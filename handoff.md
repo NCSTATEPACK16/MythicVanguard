@@ -81,6 +81,13 @@ Architecture: plain 2D nodes (`Node2D`/`Area2D`), logical state in a 2D array �
 > 2. Create `export_presets.cfg` with a Web preset (gl_compatibility is already set). Document the headless build command: `godot --headless --export-release Web build/index.html`.
 > 3. Verify `netlify.toml` still serves COOP (`same-origin`) / COEP (`require-corp`) headers and that `build/` is the publish directory."
 
+## 🎯 Phase F: Rules Integrity & QoL — ✅ COMPLETE
+Spec: `docs/superpowers/specs/2026-07-10-phase-f-qol-design.md`. Delivered:
+1. **Rules fixes:** two-square rule (`piece.move_history` + `main.gd::_banned_square`, enforced in `_calculate_valid_moves` for both sides) and player stalemate loss (`main.gd::_team_has_moves`, checked when the turn passes to the player).
+2. **Deduction aids:** moved-piece dot on hidden enemy tokens (`PieceData.has_moved`); Forces Remaining table in the left panel (public info: `REQUIRED_PIECES − captured`); combat result popup (`_show_combat_result`).
+3. **Session comfort:** 3-slot deployment save/load (`user://layouts.cfg`, validated on load); two-click attack confirmation (`armed_attack` + crossed-swords marker); move history log panel (right side during battle, reveal-safe entries).
+4. **Options (title screen):** AI difficulty Easy/Hard (`GameManager.ai_difficulty`, sharper weights + less noise in `ai_controller.gd`) and Fast Animations (`GameManager.anim_time()`), both persisted to `user://layouts.cfg` `[options]`.
+
 ---
 
 ## 🧪 Dev Testing Flags
@@ -90,6 +97,7 @@ Run the game with user args (after `--`) for automated checks:
 - `--screenshot --autodeploy --aitest` — plays 25 random player turns with AI responses, logging each move.
 - `--screenshot --autodeploy --victory` — forces the victory screen (confetti + Play Again).
 - `--screenshot-title` — screenshots the title screen instead.
+- `godot --headless --path . -- --rulestest` — asserts the combat table, two-square rule, and stalemate detection; exits non-zero on failure.
 
 ## ⚙️ Architectural Guardrails (carried over from v1)
 * **State vs. visuals:** the logical grid (`grid[x][y]`) is the source of truth; never read game state from pixel positions. When a piece is `queue_free()`d, always null its grid cell.

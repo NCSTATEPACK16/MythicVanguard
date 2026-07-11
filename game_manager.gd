@@ -24,7 +24,28 @@ var music_stream: AudioStreamMP3 = preload("res://assets/audio/music.mp3")
 var muted: bool = false
 var _music_player: AudioStreamPlayer
 
+const SETTINGS_PATH = "user://layouts.cfg"
+var ai_difficulty: String = "easy"
+var fast_anim: bool = false
+
+func anim_time(t: float) -> float:
+	return t * 0.5 if fast_anim else t
+
+func save_settings():
+	var cfg = ConfigFile.new()
+	cfg.load(SETTINGS_PATH)  # ignore error: file may not exist yet
+	cfg.set_value("options", "ai_difficulty", ai_difficulty)
+	cfg.set_value("options", "fast_anim", fast_anim)
+	cfg.save(SETTINGS_PATH)
+
+func _load_settings():
+	var cfg = ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) == OK:
+		ai_difficulty = cfg.get_value("options", "ai_difficulty", "easy")
+		fast_anim = cfg.get_value("options", "fast_anim", false)
+
 func _ready():
+	_load_settings()
 	for bus_name in ["Music", "SFX"]:
 		if AudioServer.get_bus_index(bus_name) == -1:
 			AudioServer.add_bus()

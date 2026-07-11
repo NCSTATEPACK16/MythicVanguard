@@ -62,7 +62,12 @@ func _update_visuals():
 	else:
 		icon.texture = GameManager.BACK_ICON
 		icon.self_modulate = Color(0.92, 0.78, 0.72)
-		rank_label.text = ""
+		if data.has_moved:
+			# This piece has moved, so it cannot be a Ward or the Relic.
+			rank_label.text = "•"
+			rank_label.add_theme_color_override("font_color", Color(0.95, 0.85, 0.4))
+		else:
+			rank_label.text = ""
 		token.self_modulate = HIDDEN_COLOR
 
 func _process(_delta):

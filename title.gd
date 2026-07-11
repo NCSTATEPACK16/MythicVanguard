@@ -12,6 +12,26 @@ func _ready():
 	var play_button = $CenterBox/PlayButton
 	play_button.pressed.connect(_on_play_pressed)
 
+	var diff = OptionButton.new()
+	diff.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	diff.custom_minimum_size = Vector2(220, 0)
+	diff.add_item("AI: Easy")
+	diff.add_item("AI: Hard")
+	diff.selected = 1 if GameManager.ai_difficulty == "hard" else 0
+	diff.item_selected.connect(func(idx):
+		GameManager.ai_difficulty = "hard" if idx == 1 else "easy"
+		GameManager.save_settings())
+	$CenterBox.add_child(diff)
+
+	var fast = CheckBox.new()
+	fast.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	fast.text = "Fast animations"
+	fast.button_pressed = GameManager.fast_anim
+	fast.toggled.connect(func(on):
+		GameManager.fast_anim = on
+		GameManager.save_settings())
+	$CenterBox.add_child(fast)
+
 	# Gentle title pulse
 	var title = $CenterBox/Title
 	title.pivot_offset = title.size / 2.0

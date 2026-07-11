@@ -15,6 +15,7 @@ var selected_piece = null
 var valid_moves = []
 var last_move_from: Vector2i = Vector2i(-1, -1)
 var last_move_to: Vector2i = Vector2i(-1, -1)
+var armed_attack: Vector2i = Vector2i(-1, -1)
 
 var PieceScene = preload("res://piece.tscn")
 var ExplosionScene = preload("res://explosion.tscn")
@@ -30,6 +31,13 @@ var captured_panel: PanelContainer
 var player_losses_list: VBoxContainer
 var enemy_losses_list: VBoxContainer
 var banner: Label
+var combat_label: Label
+var captured_counts = {}
+var forces_labels = {}
+var history_panel: PanelContainer
+var history_list: VBoxContainer
+var history_scroll: ScrollContainer
+var move_number: int = 0
 
 var _pulse_time: float = 0.0
 
@@ -40,6 +48,8 @@ func _ready():
 	_build_deploy_tray()
 	_build_captured_panel()
 	_build_banner()
+	_build_history_panel()
+	captured_counts = {GameManager.Team.PLAYER: {}, GameManager.Team.ENEMY: {}}
 	pool_counts = GameManager.REQUIRED_PIECES.duplicate()
 	_refresh_tray()
 	_generate_ai_setup()
@@ -194,6 +204,22 @@ func _build_deploy_tray():
 	rand_btn.pressed.connect(_on_randomize_pressed)
 	vbox.add_child(rand_btn)
 
+	for row_name in ["Save", "Load"]:
+		var hbox = HBoxContainer.new()
+		var lbl = Label.new()
+		lbl.text = row_name + " Layout:"
+		hbox.add_child(lbl)
+		for slot in range(1, 4):
+			var b = Button.new()
+			b.text = str(slot)
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			if row_name == "Save":
+				b.pressed.connect(_save_layout.bind(slot))
+			else:
+				b.pressed.connect(_load_layout.bind(slot))
+			hbox.add_child(b)
+		vbox.add_child(hbox)
+
 	start_button = Button.new()
 	start_button.text = "Start Battle!"
 	start_button.disabled = true
@@ -256,6 +282,18 @@ func _build_captured_panel():
 	vbox.add_theme_constant_override("separation", 4)
 	captured_panel.add_child(vbox)
 
+	var forces_title = Label.new()
+	forces_title.text = "Forces Remaining (You / Foe)"
+	forces_title.add_theme_font_size_override("font_size", 20)
+	vbox.add_child(forces_title)
+
+	for type in GameManager.REQUIRED_PIECES.keys():
+		var row = Label.new()
+		row.add_theme_font_size_override("font_size", 16)
+		vbox.add_child(row)
+		forces_labels[type] = row
+	vbox.add_child(HSeparator.new())
+
 	var enemy_title = Label.new()
 	enemy_title.text = "Enemy Losses"
 	enemy_title.add_theme_font_size_override("font_size", 22)
@@ -264,7 +302,7 @@ func _build_captured_panel():
 
 	enemy_losses_list = VBoxContainer.new()
 	var enemy_scroll = ScrollContainer.new()
-	enemy_scroll.custom_minimum_size = Vector2(0, 330)
+	enemy_scroll.custom_minimum_size = Vector2(0, 150)
 	enemy_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	enemy_scroll.add_child(enemy_losses_list)
 	vbox.add_child(enemy_scroll)
@@ -279,12 +317,22 @@ func _build_captured_panel():
 
 	player_losses_list = VBoxContainer.new()
 	var player_scroll = ScrollContainer.new()
-	player_scroll.custom_minimum_size = Vector2(0, 330)
+	player_scroll.custom_minimum_size = Vector2(0, 150)
 	player_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	player_scroll.add_child(player_losses_list)
 	vbox.add_child(player_scroll)
 
+func _refresh_forces():
+	for type in forces_labels.keys():
+		var total = GameManager.REQUIRED_PIECES[type]
+		var mine = total - captured_counts[GameManager.Team.PLAYER].get(type, 0)
+		var foes = total - captured_counts[GameManager.Team.ENEMY].get(type, 0)
+		forces_labels[type].text = "%2s %-10s %d / %d" % [_rank_display(type), type, mine, foes]
+
 func _record_capture(piece):
+	var counts = captured_counts[piece.data.team]
+	counts[piece.data.type] = counts.get(piece.data.type, 0) + 1
+	_refresh_forces()
 	var entry = Label.new()
 	entry.text = "%s  %s" % [_rank_display(piece.data.type), piece.data.type]
 	entry.add_theme_font_size_override("font_size", 18)
@@ -307,6 +355,35 @@ func _build_banner():
 	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui.add_child(banner)
 
+	combat_label = Label.new()
+	combat_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	combat_label.offset_top = 90
+	combat_label.offset_bottom = 150
+	combat_label.offset_left = -600
+	combat_label.offset_right = 600
+	combat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	combat_label.add_theme_font_size_override("font_size", 34)
+	combat_label.add_theme_constant_override("outline_size", 10)
+	combat_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+	combat_label.modulate.a = 0.0
+	combat_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui.add_child(combat_label)
+
+func _show_combat_result(attacker, defender, result: String):
+	var outcome := ""
+	match result:
+		"attacker_wins": outcome = "attacker wins"
+		"defender_wins": outcome = "defender wins"
+		"draw": outcome = "both fall"
+		"game_over": outcome = "Relic captured!"
+	combat_label.text = "%s (%s) vs %s (%s) — %s" % [
+		attacker.type, _rank_display(attacker.type),
+		defender.type, _rank_display(defender.type), outcome]
+	var tween = create_tween()
+	tween.tween_property(combat_label, "modulate:a", 1.0, 0.15)
+	tween.tween_interval(1.6)
+	tween.tween_property(combat_label, "modulate:a", 0.0, 0.4)
+
 func _show_banner(text: String, color: Color):
 	banner.text = text
 	banner.add_theme_color_override("font_color", color)
@@ -319,6 +396,52 @@ func _show_banner(text: String, color: Color):
 	tween.set_parallel(false)
 	tween.tween_interval(0.7)
 	tween.tween_property(banner, "modulate:a", 0.0, 0.3)
+
+func _build_history_panel():
+	history_panel = PanelContainer.new()
+	history_panel.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	history_panel.offset_left = -320
+	history_panel.offset_right = -20
+	history_panel.offset_top = -420
+	history_panel.offset_bottom = 420
+	history_panel.visible = false
+	ui.add_child(history_panel)
+
+	var vbox = VBoxContainer.new()
+	history_panel.add_child(vbox)
+	var title = Label.new()
+	title.text = "Move History"
+	title.add_theme_font_size_override("font_size", 22)
+	vbox.add_child(title)
+
+	history_scroll = ScrollContainer.new()
+	history_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(history_scroll)
+	history_list = VBoxContainer.new()
+	history_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	history_scroll.add_child(history_list)
+
+func _coord(pos: Vector2i) -> String:
+	return "%s%d" % [char(65 + pos.x), BOARD_SIZE - pos.y]
+
+func _log_move(is_player: bool, from: Vector2i, to: Vector2i, attacker, defender, result: String):
+	move_number += 1
+	var who = "You" if is_player else "Enemy"
+	var text = "%d. %s %s→%s" % [move_number, who, _coord(from), _coord(to)]
+	if defender != null:
+		var outcome = {"attacker_wins": "attacker wins", "defender_wins": "defender wins",
+			"draw": "both fall", "game_over": "Relic captured!"}[result]
+		text += "\n    %s(%s) × %s(%s) — %s" % [attacker.type, _rank_display(attacker.type),
+			defender.type, _rank_display(defender.type), outcome]
+	var entry = Label.new()
+	entry.text = text
+	entry.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	entry.custom_minimum_size = Vector2(270, 0)
+	entry.add_theme_font_size_override("font_size", 14)
+	entry.modulate = Color.CORNFLOWER_BLUE if is_player else Color.TOMATO
+	history_list.add_child(entry)
+	await get_tree().process_frame
+	history_scroll.scroll_vertical = int(history_scroll.get_v_scroll_bar().max_value)
 
 # ---------------------------------------------------------------- board drawing
 
@@ -366,6 +489,13 @@ func _draw():
 				draw_arc(center, 27.0, 0.0, TAU, 40, Color(0.95, 0.25, 0.2, pulse), 4.0)
 			else:
 				draw_circle(center, 13.0, Color(0.95, 0.92, 0.55, pulse))
+
+		if armed_attack.x >= 0:
+			# Crossed swords: click again to confirm the attack
+			var c = _tile_center(armed_attack)
+			var s = 18.0
+			draw_line(c + Vector2(-s, -s), c + Vector2(s, s), Color(1.0, 0.3, 0.2, 0.95), 6.0)
+			draw_line(c + Vector2(-s, s), c + Vector2(s, -s), Color(1.0, 0.3, 0.2, 0.95), 6.0)
 
 		if selected_piece:
 			var pos = selected_piece.current_grid_pos
@@ -460,15 +590,73 @@ func _on_randomize_pressed():
 	pool_counts = GameManager.REQUIRED_PIECES.duplicate()
 	_on_auto_deploy_pressed()
 
+const LAYOUTS_PATH = "user://layouts.cfg"
+
+func _save_layout(slot: int):
+	var pieces = []
+	for x in range(BOARD_SIZE):
+		for y in range(6, BOARD_SIZE):
+			var piece = _piece_at(Vector2i(x, y))
+			if piece and piece.data.team == GameManager.Team.PLAYER:
+				pieces.append({"type": piece.data.type, "x": x, "y": y})
+	if pieces.size() != 40:
+		current_turn_label.text = "Place all 40 pieces before saving"
+		return
+	var cfg = ConfigFile.new()
+	cfg.load(LAYOUTS_PATH)  # ignore error: file may not exist yet
+	cfg.set_value("slot_%d" % slot, "pieces", pieces)
+	cfg.save(LAYOUTS_PATH)
+	current_turn_label.text = "Layout saved to slot %d" % slot
+
+func _load_layout(slot: int):
+	var cfg = ConfigFile.new()
+	if cfg.load(LAYOUTS_PATH) != OK:
+		current_turn_label.text = "No saved layouts yet"
+		return
+	var pieces = cfg.get_value("slot_%d" % slot, "pieces", [])
+	# Validate: exact required counts, all in bottom 4 rows, unique tiles.
+	var counts = {}
+	var seen = {}
+	var valid = pieces.size() == 40
+	for entry in pieces:
+		var pos = Vector2i(entry["x"], entry["y"])
+		if not _in_bounds(pos) or pos.y < 6 or seen.has(pos):
+			valid = false
+			break
+		seen[pos] = true
+		counts[entry["type"]] = counts.get(entry["type"], 0) + 1
+	if valid:
+		for type in GameManager.REQUIRED_PIECES.keys():
+			if counts.get(type, 0) != GameManager.REQUIRED_PIECES[type]:
+				valid = false
+	if not valid:
+		current_turn_label.text = "Slot %d is empty or invalid" % slot
+		return
+	for x in range(BOARD_SIZE):
+		for y in range(6, BOARD_SIZE):
+			var piece = _piece_at(Vector2i(x, y))
+			if piece and piece.data.team == GameManager.Team.PLAYER:
+				grid[x][y] = null
+				piece.queue_free()
+	for entry in pieces:
+		_spawn_piece(GameManager.Team.PLAYER, entry["type"], Vector2i(entry["x"], entry["y"]))
+	for type in pool_counts.keys():
+		pool_counts[type] = 0
+	_refresh_tray()
+	queue_redraw()
+	current_turn_label.text = "Layout %d loaded" % slot
+
 func _on_start_battle_pressed():
 	if GameManager.current_state != GameManager.GameState.SETUP:
 		return
 	deploy_panel.visible = false
 	captured_panel.visible = true
+	history_panel.visible = true
 	GameManager.current_state = GameManager.GameState.PLAYER_TURN
 	current_turn_label.text = "Your Turn"
 	_show_banner("Battle Begins!", Color.GOLD)
 	GameManager.play_sfx("battle_start")
+	_refresh_forces()
 	queue_redraw()
 
 func _generate_ai_setup():
@@ -532,6 +720,7 @@ func _on_piece_clicked(piece):
 		return
 
 	if piece.data.team == GameManager.Team.PLAYER:
+		armed_attack = Vector2i(-1, -1)
 		if piece == selected_piece:
 			selected_piece = null
 			valid_moves.clear()
@@ -542,7 +731,14 @@ func _on_piece_clicked(piece):
 		queue_redraw()
 	elif piece.data.team == GameManager.Team.ENEMY:
 		if selected_piece and piece.current_grid_pos in valid_moves:
-			_execute_move(selected_piece, piece.current_grid_pos, true)
+			# First click arms the attack, second click confirms it.
+			if armed_attack == piece.current_grid_pos:
+				armed_attack = Vector2i(-1, -1)
+				_execute_move(selected_piece, piece.current_grid_pos, true)
+			else:
+				armed_attack = piece.current_grid_pos
+				GameManager.play_sfx("select")
+				queue_redraw()
 
 func _unhandled_input(event):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -554,6 +750,9 @@ func _unhandled_input(event):
 		if GameManager.current_state == GameManager.GameState.SETUP:
 			_try_deploy_at(target)
 		elif GameManager.current_state == GameManager.GameState.PLAYER_TURN:
+			if armed_attack.x >= 0 and target != armed_attack:
+				armed_attack = Vector2i(-1, -1)
+				queue_redraw()
 			if selected_piece and target in valid_moves and _piece_at(target) == null:
 				_execute_move(selected_piece, target, true)
 
@@ -597,6 +796,14 @@ func _calculate_valid_moves(piece) -> Array:
 		moves.erase(banned)
 	return moves
 
+func _team_has_moves(team) -> bool:
+	for x in range(BOARD_SIZE):
+		for y in range(BOARD_SIZE):
+			var piece = _piece_at(Vector2i(x, y))
+			if piece and piece.data.team == team and _calculate_valid_moves(piece).size() > 0:
+				return true
+	return false
+
 func _banned_square(piece) -> Vector2i:
 	# Two-square rule: last move was the exact reverse of the one before it →
 	# the piece may not immediately return to where it just came from.
@@ -617,9 +824,11 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 	last_move_from = old_pos
 	last_move_to = target_pos
 	piece_to_move.record_move(old_pos, target_pos)
+	piece_to_move.data.has_moved = true
 
 	selected_piece = null
 	valid_moves.clear()
+	armed_attack = Vector2i(-1, -1)
 	queue_redraw()
 
 	var start_world_pos = piece_to_move.global_position
@@ -634,7 +843,7 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 		piece_to_move.z_index = 50
 		var bump_tween = create_tween()
 		var halfway_pos = start_world_pos.lerp(end_world_pos, 0.6)
-		bump_tween.tween_property(piece_to_move, "global_position", halfway_pos, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		bump_tween.tween_property(piece_to_move, "global_position", halfway_pos, GameManager.anim_time(0.2)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		await bump_tween.finished
 
 		# Reveal pieces
@@ -642,8 +851,10 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 		target_tile._update_visuals()
 		piece_to_move.data.is_revealed = true
 		piece_to_move._update_visuals()
+		_show_combat_result(piece_to_move.data, target_tile.data, result)
+		_log_move(is_player, old_pos, target_pos, piece_to_move.data, target_tile.data, result)
 
-		await get_tree().create_timer(1.0).timeout
+		await get_tree().create_timer(GameManager.anim_time(1.0)).timeout
 
 		if result == "attacker_wins" or result == "game_over":
 			_explode_at(target_tile)
@@ -651,7 +862,7 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 			target_tile.queue_free()
 
 			var land_tween = create_tween()
-			land_tween.tween_property(piece_to_move, "global_position", end_world_pos, 0.15).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+			land_tween.tween_property(piece_to_move, "global_position", end_world_pos, GameManager.anim_time(0.15)).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 			await land_tween.finished
 
 			grid[target_pos.x][target_pos.y] = piece_to_move
@@ -664,9 +875,9 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 
 			# Little shake for the victorious defender
 			var shake_tween = create_tween()
-			shake_tween.tween_property(target_tile.visuals, "position", Vector2(10, 0), 0.05)
-			shake_tween.tween_property(target_tile.visuals, "position", Vector2(-10, 0), 0.05)
-			shake_tween.tween_property(target_tile.visuals, "position", Vector2(0, 0), 0.05)
+			shake_tween.tween_property(target_tile.visuals, "position", Vector2(10, 0), GameManager.anim_time(0.05))
+			shake_tween.tween_property(target_tile.visuals, "position", Vector2(-10, 0), GameManager.anim_time(0.05))
+			shake_tween.tween_property(target_tile.visuals, "position", Vector2(0, 0), GameManager.anim_time(0.05))
 			await shake_tween.finished
 
 		elif result == "draw":
@@ -677,7 +888,7 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 			target_tile.queue_free()
 			piece_to_move.queue_free()
 			grid[target_pos.x][target_pos.y] = null
-			await get_tree().create_timer(0.2).timeout
+			await get_tree().create_timer(GameManager.anim_time(0.2)).timeout
 
 		if is_instance_valid(piece_to_move):
 			piece_to_move.z_index = 10
@@ -689,13 +900,16 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 	else:
 		# Empty tile smooth slide
 		GameManager.play_sfx("move")
+		_log_move(is_player, old_pos, target_pos, null, null, "")
 		var slide_tween = create_tween()
-		slide_tween.tween_property(piece_to_move, "global_position", end_world_pos, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		slide_tween.tween_property(piece_to_move, "global_position", end_world_pos, GameManager.anim_time(0.3)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		await slide_tween.finished
 
 		grid[target_pos.x][target_pos.y] = piece_to_move
 		piece_to_move.current_grid_pos = target_pos
 
+	if is_instance_valid(piece_to_move):
+		piece_to_move._update_visuals()
 	queue_redraw()
 
 	if GameManager.current_state != GameManager.GameState.GAME_OVER:
@@ -705,6 +919,11 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 			_show_banner("Enemy Turn", Color.TOMATO)
 			_execute_ai_turn()
 		else:
+			if not _team_has_moves(GameManager.Team.PLAYER):
+				# Player has no legal moves: loss by stalemate.
+				GameManager.current_state = GameManager.GameState.GAME_OVER
+				_show_victory_screen(false)
+				return
 			GameManager.current_state = GameManager.GameState.PLAYER_TURN
 			current_turn_label.text = "Your Turn"
 			_show_banner("Your Turn", Color.CORNFLOWER_BLUE)
@@ -718,7 +937,7 @@ func _explode_at(piece):
 	add_child(explosion)
 
 func _execute_ai_turn():
-	await get_tree().create_timer(0.8).timeout
+	await get_tree().create_timer(GameManager.anim_time(0.8)).timeout
 
 	var move = ai.choose_move(self)
 	if move.is_empty():
@@ -831,5 +1050,19 @@ func _debug_rules_test():
 		{"from": Vector2i(0, 6), "to": Vector2i(0, 7)},
 	]
 	_rt_assert(Vector2i(0, 6) in _calculate_valid_moves(kn), "non-oscillating history does not ban")
+
+	# Stalemate detection: only immobile pieces left = no moves. Clears the
+	# board, so these assertions must stay last.
+	for x in range(BOARD_SIZE):
+		for y in range(BOARD_SIZE):
+			var pc = _piece_at(Vector2i(x, y))
+			if pc:
+				grid[x][y] = null
+				pc.queue_free()
+	_spawn_piece(GameManager.Team.PLAYER, "Ward", Vector2i(0, 9))
+	_spawn_piece(GameManager.Team.PLAYER, "Relic", Vector2i(1, 9))
+	_rt_assert(not _team_has_moves(GameManager.Team.PLAYER), "immobile-only army has no moves")
+	_spawn_piece(GameManager.Team.PLAYER, "Knight", Vector2i(5, 5))
+	_rt_assert(_team_has_moves(GameManager.Team.PLAYER), "mobile piece restores moves")
 
 	_rt_finish()

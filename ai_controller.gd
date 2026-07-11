@@ -25,7 +25,8 @@ func choose_move(main) -> Dictionary:
 	return best
 
 func _score_move(main, piece, target: Vector2i, relic_pos: Vector2i) -> float:
-	var score = randf() * 0.4  # noise so play isn't deterministic
+	var hard = GameManager.ai_difficulty == "hard"
+	var score = randf() * (0.15 if hard else 0.4)  # noise so play isn't deterministic
 
 	var defender = main._piece_at(target)
 	if defender:
@@ -34,7 +35,7 @@ func _score_move(main, piece, target: Vector2i, relic_pos: Vector2i) -> float:
 				"game_over":
 					score += 1000.0
 				"attacker_wins":
-					score += 8.0 + _piece_value(defender.data)
+					score += (12.0 if hard else 8.0) + _piece_value(defender.data)
 				"defender_wins":
 					score -= 10.0
 				"draw":
@@ -48,7 +49,7 @@ func _score_move(main, piece, target: Vector2i, relic_pos: Vector2i) -> float:
 			elif piece.data.rank <= 4:
 				score += 0.8
 			elif piece.data.rank >= 8:
-				score -= 3.0
+				score -= 5.0 if hard else 3.0
 	else:
 		# Advance toward the player's side of the board
 		if target.y > piece.current_grid_pos.y:
@@ -61,7 +62,7 @@ func _score_move(main, piece, target: Vector2i, relic_pos: Vector2i) -> float:
 	# Don't pull a bodyguard away from our Relic
 	if relic_pos.x >= 0:
 		if _adjacent(piece.current_grid_pos, relic_pos) and not _adjacent(target, relic_pos):
-			score -= 3.0
+			score -= 6.0 if hard else 3.0
 
 	return score
 
