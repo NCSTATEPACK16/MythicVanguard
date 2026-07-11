@@ -87,6 +87,7 @@ Spec: `docs/superpowers/specs/2026-07-10-phase-f-qol-design.md`. Delivered:
 2. **Deduction aids:** moved-piece dot on hidden enemy tokens (`PieceData.has_moved`); Forces Remaining table in the left panel (public info: `REQUIRED_PIECES − captured`); combat result popup (`_show_combat_result`).
 3. **Session comfort:** 3-slot deployment save/load (`user://layouts.cfg`, validated on load); two-click attack confirmation (`armed_attack` + crossed-swords marker); move history log panel (right side during battle, reveal-safe entries).
 4. **Options (title screen):** AI difficulty Easy/Hard (`GameManager.ai_difficulty`, sharper weights + less noise in `ai_controller.gd`) and Fast Animations (`GameManager.anim_time()`), both persisted to `user://layouts.cfg` `[options]`.
+5. **Post-F additions:** in-game "Rules ?" reference overlay (`_build_rules_overlay`, debug flag `--rulesoverlay`); Hard AI infers from the public has-moved fact (unmoved pieces may be Wards); explicit `emulate_mouse_from_touch` for mobile web taps; `README.md` with screenshot for GitHub (`NCSTATEPACK16/MythicVanguard`, public; local `docs/` is gitignored).
 
 ---
 
