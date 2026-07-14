@@ -91,14 +91,32 @@ Spec: `docs/superpowers/specs/2026-07-10-phase-f-qol-design.md`. Delivered:
 
 ---
 
+## ✨ Phase G: Juice & Modes — ✅ COMPLETE
+Two tracks. Every item verified via `--rulestest` and/or a driven game screenshot.
+
+**Track G1 — Visual & audio juice**
+1. **Combat impact FX:** decaying camera shake (`main.gd::_screen_shake`, offset-based so board centering via `position` is untouched) + a white hit-flash on the losing piece (`piece.gd::hit_flash`, tweens the token's `self_modulate` — the stylebox bg is white). Fired from `_execute_move` before the loser explodes.
+2. **Board/move feedback:** glowing valid-move/attack tile fills + pulsing selection outline in `_draw` (reuses `_pulse_time`); hover scale-up on the piece root in `piece.gd` (`mouse_entered`/`mouse_exited`, leaves the Visuals idle-breathe tween alone).
+3. **Adaptive music + stingers:** `GameManager.set_music_intensity(frac)` swells volume as pieces fall (hooked in `_record_capture`, full by ~30 captures); `play_sfx` gained a `pitch` arg and `_explode_at` pitches the destruction cue by which side's piece fell. No new audio assets.
+4. **Victory/defeat polish:** banner scale-punch (`_punch_banner`), multi-cannon confetti, and a bloody radial `vignette.gdshader` on defeat, in `_show_victory_screen`.
+
+**Track G2 — New modes / AI depth**
+1. **Legendary AI:** 1-ply lookahead (`ai_controller.gd::_retaliation_penalty` + `_best_player_capture_value`) over a reversible `main.grid` edit — subtracts the player's best full-information reply, so it won't hang pieces or expose the Relic. Shares Hard's heuristics + perfect memory. Third title-screen difficulty.
+2. **Blitz + MatchConfig:** board size, deploy rows, chasm layout, roster, and the two-square rule are no longer constants — `main.gd` reads `GameManager.get_match_config()` at startup (`_apply_match_config`). `BOARD_SIZE` is now a `var`; deploy ranges use `deploy_start_row`; `roster` drives tray/forces/auto-deploy/layout validation. Classic (10×10, 40) is default; Blitz is 8×8, 21 pieces, one center chasm, no two-square rule.
+3. **Rule variants (title-screen toggles, persisted):** permanent reveal-on-capture (`piece.gd::reveal_permanently`, `permanent_reveal` on the config) and deadly Assassin (`GameManager.variant_assassin_any`, applied in `resolve_combat`).
+4. **Puzzle mode:** `GameManager.PUZZLES` (mate-in-1 tactical scenarios) loaded by `main.gd::_setup_puzzle`; goal is "capture the Relic in N moves", checked in `_execute_move`, with a `_show_puzzle_failed` retry overlay. Selectable from the title Mode dropdown. Multi-move puzzles are scaffolded (`puzzle_goal_moves`) but not yet authored.
+
+---
+
 ## 🧪 Dev Testing Flags
 Run the game with user args (after `--`) for automated checks:
 - `godot --path . -- --screenshot` — boots to the deploy screen, saves `user://screenshot.png`, quits.
 - `--screenshot --autodeploy` — also auto-deploys and starts the battle first.
 - `--screenshot --autodeploy --aitest` — plays 25 random player turns with AI responses, logging each move.
-- `--screenshot --autodeploy --victory` — forces the victory screen (confetti + Play Again).
+- `--screenshot --autodeploy --victory` — forces the victory screen (confetti + Play Again). `--defeat` forces the defeat screen (vignette).
 - `--screenshot-title` — screenshots the title screen instead.
-- `godot --headless --path . -- --rulestest` — asserts the combat table, two-square rule, and stalemate detection; exits non-zero on failure.
+- Phase G config overrides (apply before the board is built): `--blitz` (Blitz mode), `--reveal` (permanent-reveal variant), `--puzzle` (load the selected puzzle), `--legendary` (set AI difficulty for the aitest run).
+- `godot --headless --path . -- --rulestest` — asserts the combat table, two-square rule, stalemate detection, difficulty-based AI memory, the Legendary lookahead, the deadly-Assassin variant, and the puzzle finisher; exits non-zero on failure.
 
 ## ⚙️ Architectural Guardrails (carried over from v1)
 * **State vs. visuals:** the logical grid (`grid[x][y]`) is the source of truth; never read game state from pixel positions. When a piece is `queue_free()`d, always null its grid cell.

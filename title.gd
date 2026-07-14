@@ -28,12 +28,25 @@ func _ready():
 	var mode = OptionButton.new()
 	mode.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	mode.custom_minimum_size = Vector2(220, 0)
-	var modes = ["classic", "blitz"]
+	# Items: 0 Classic, 1 Blitz, then one entry per puzzle.
 	mode.add_item("Mode: Classic")
 	mode.add_item("Mode: Blitz")
-	mode.selected = maxi(0, modes.find(GameManager.match_mode))
+	for i in range(GameManager.PUZZLES.size()):
+		mode.add_item("Puzzle: %s" % GameManager.PUZZLES[i]["name"])
+	var sel = 0
+	if GameManager.match_mode == "blitz":
+		sel = 1
+	elif GameManager.match_mode == "puzzle":
+		sel = 2 + GameManager.puzzle_index
+	mode.selected = sel
 	mode.item_selected.connect(func(idx):
-		GameManager.match_mode = modes[idx]
+		if idx == 0:
+			GameManager.match_mode = "classic"
+		elif idx == 1:
+			GameManager.match_mode = "blitz"
+		else:
+			GameManager.match_mode = "puzzle"
+			GameManager.puzzle_index = idx - 2
 		GameManager.save_settings())
 	$CenterBox.add_child(mode)
 

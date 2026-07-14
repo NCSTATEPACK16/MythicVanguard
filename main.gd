@@ -11,6 +11,11 @@ var deploy_start_row: int = 6  # first player-deploy row = BOARD_SIZE - deploy_r
 var two_square_rule: bool = true
 var permanent_reveal: bool = false
 
+# Puzzle mode: a fixed position with a "capture the Relic in N moves" goal.
+var puzzle_mode: bool = false
+var puzzle_goal_moves: int = 1
+var _puzzle_player_moves: int = 0
+
 var grid = []
 
 # Setup phase state
@@ -61,6 +66,8 @@ func _ready():
 		GameManager.match_mode = "blitz"
 	if "--reveal" in OS.get_cmdline_user_args():
 		GameManager.variant_permanent_reveal = true
+	if "--puzzle" in OS.get_cmdline_user_args():
+		GameManager.match_mode = "puzzle"
 	_apply_match_config()
 	_initialize_grid()
 	_center_camera()
@@ -74,8 +81,11 @@ func _ready():
 	captured_counts = {GameManager.Team.PLAYER: {}, GameManager.Team.ENEMY: {}}
 	pool_counts = roster.duplicate()
 	_refresh_tray()
-	_generate_ai_setup()
-	current_turn_label.text = "Deploy Your Army"
+	if GameManager.match_mode == "puzzle":
+		_setup_puzzle()
+	else:
+		_generate_ai_setup()
+		current_turn_label.text = "Deploy Your Army"
 	queue_redraw()
 	if "--screenshot" in OS.get_cmdline_user_args():
 		_debug_screenshot()
@@ -907,6 +917,58 @@ func _generate_ai_setup():
 			for i in range(roster[type]):
 				place_piece.call(type, false)
 
+# Place a puzzle's fixed position and jump straight to the player's turn.
+func _setup_puzzle():
+	var pz = GameManager.current_puzzle()
+	puzzle_mode = true
+	puzzle_goal_moves = pz.get("moves", 1)
+	_puzzle_player_moves = 0
+	var team_map = {"player": GameManager.Team.PLAYER, "enemy": GameManager.Team.ENEMY}
+	for entry in pz["pieces"]:
+		var piece = _spawn_piece(team_map[entry["team"]], entry["type"], Vector2i(entry["x"], entry["y"]))
+		piece.data.is_revealed = true  # tactics are full-information
+		piece._update_visuals()
+	deploy_panel.visible = false
+	captured_panel.visible = false  # roster totals are meaningless in a puzzle
+	history_panel.visible = true
+	GameManager.current_state = GameManager.GameState.PLAYER_TURN
+	var plural = "" if puzzle_goal_moves == 1 else "s"
+	current_turn_label.text = "PUZZLE — %s" % pz["name"]
+	_show_banner("Capture the Relic in %d move%s" % [puzzle_goal_moves, plural], Color.GOLD)
+
+func _show_puzzle_failed():
+	GameManager.play_sfx("defeat")
+	var overlay = ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.7)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	$CanvasLayer.add_child(overlay)
+
+	var vbox = VBoxContainer.new()
+	vbox.set_anchors_preset(Control.PRESET_CENTER)
+	vbox.offset_left = -400
+	vbox.offset_right = 400
+	vbox.offset_top = -160
+	vbox.offset_bottom = 160
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 30)
+	overlay.add_child(vbox)
+
+	var label = Label.new()
+	label.text = "NOT QUITE!"
+	label.add_theme_font_size_override("font_size", 96)
+	label.add_theme_color_override("font_color", Color.CRIMSON)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(label)
+
+	var retry = Button.new()
+	retry.text = "Retry Puzzle"
+	retry.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	retry.add_theme_font_size_override("font_size", 32)
+	retry.pressed.connect(func():
+		GameManager.current_state = GameManager.GameState.SETUP
+		get_tree().reload_current_scene())
+	vbox.add_child(retry)
+
 func _on_piece_dropped(piece):
 	if GameManager.current_state != GameManager.GameState.SETUP:
 		return
@@ -1142,6 +1204,14 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 
 	if GameManager.current_state != GameManager.GameState.GAME_OVER:
 		if is_player:
+			if puzzle_mode:
+				# The winning move already returned via the game_over branch.
+				# Reaching here means this player move did not solve it.
+				_puzzle_player_moves += 1
+				if _puzzle_player_moves >= puzzle_goal_moves:
+					GameManager.current_state = GameManager.GameState.GAME_OVER
+					_show_puzzle_failed()
+					return
 			GameManager.current_state = GameManager.GameState.AI_TURN
 			current_turn_label.text = "Enemy Turn"
 			_show_banner("Enemy Turn", Color.TOMATO)
@@ -1402,5 +1472,19 @@ func _debug_rules_test():
 	var leg_move = ai.choose_move(self)
 	_rt_assert(leg_move.get("target") != Vector2i(5, 5), "legendary AI avoids hanging its warlord")
 	GameManager.ai_difficulty = pre_diff
+
+	# Puzzle mechanic: a clear column lets a Runner strike the enemy Relic for
+	# the game-ending capture (how the mate-in-1 puzzles are solved). Column 0
+	# has no chasm on the classic board.
+	for x in range(BOARD_SIZE):
+		for y in range(BOARD_SIZE):
+			var pc3 = _piece_at(Vector2i(x, y))
+			if pc3:
+				grid[x][y] = null
+				pc3.queue_free()
+	var pr = _spawn_piece(GameManager.Team.PLAYER, "Runner", Vector2i(0, 5))
+	var relic = _spawn_piece(GameManager.Team.ENEMY, "Relic", Vector2i(0, 0))
+	_rt_assert(Vector2i(0, 0) in _calculate_valid_moves(pr), "puzzle: runner can reach the relic")
+	_rt_assert(GameManager.resolve_combat(pr.data, relic.data) == "game_over", "puzzle: capturing the relic wins")
 
 	_rt_finish()

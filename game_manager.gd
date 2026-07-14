@@ -38,6 +38,7 @@ func save_settings():
 	cfg.set_value("options", "fast_anim", fast_anim)
 	cfg.set_value("options", "muted", muted)
 	cfg.set_value("options", "match_mode", match_mode)
+	cfg.set_value("options", "puzzle_index", puzzle_index)
 	cfg.set_value("options", "variant_permanent_reveal", variant_permanent_reveal)
 	cfg.set_value("options", "variant_assassin_any", variant_assassin_any)
 	cfg.save(SETTINGS_PATH)
@@ -49,6 +50,7 @@ func _load_settings():
 		fast_anim = cfg.get_value("options", "fast_anim", false)
 		muted = cfg.get_value("options", "muted", false)
 		match_mode = cfg.get_value("options", "match_mode", "classic")
+		puzzle_index = cfg.get_value("options", "puzzle_index", 0)
 		variant_permanent_reveal = cfg.get_value("options", "variant_permanent_reveal", false)
 		variant_assassin_any = cfg.get_value("options", "variant_assassin_any", false)
 
@@ -149,6 +151,57 @@ const BLITZ_PIECES = {
 # Which match variant to set up. Persisted with the other options.
 var match_mode: String = "classic"
 
+# Which puzzle is selected when match_mode == "puzzle".
+var puzzle_index: int = 0
+
+# Tactical scenarios: a fixed position with a goal of "capture the enemy Relic
+# within `moves` player turns". These are all mate-in-1 finishers — the player
+# must spot the single winning move. Pieces are placed exactly; enemy ranks are
+# shown (full-information tactics). Coordinates: y=0 is the far/enemy edge.
+const PUZZLES = [
+	{
+		"name": "The Long Shot",
+		"board_size": 6,
+		"moves": 1,
+		"pieces": [
+			{"team": "enemy", "type": "Relic", "x": 2, "y": 0},
+			{"team": "enemy", "type": "Ward", "x": 1, "y": 0},
+			{"team": "enemy", "type": "Ward", "x": 3, "y": 0},
+			{"team": "enemy", "type": "Champion", "x": 5, "y": 0},
+			{"team": "player", "type": "Runner", "x": 2, "y": 5},
+			{"team": "player", "type": "Guard", "x": 0, "y": 5},
+			{"team": "player", "type": "Knight", "x": 4, "y": 5},
+		],
+	},
+	{
+		"name": "Down the Line",
+		"board_size": 6,
+		"moves": 1,
+		"pieces": [
+			{"team": "enemy", "type": "Relic", "x": 0, "y": 0},
+			{"team": "enemy", "type": "Warlord", "x": 0, "y": 1},
+			{"team": "enemy", "type": "Champion", "x": 2, "y": 2},
+			{"team": "player", "type": "Runner", "x": 5, "y": 0},
+			{"team": "player", "type": "Captain", "x": 3, "y": 5},
+		],
+	},
+	{
+		"name": "Decisive Step",
+		"board_size": 6,
+		"moves": 1,
+		"pieces": [
+			{"team": "enemy", "type": "Relic", "x": 2, "y": 0},
+			{"team": "enemy", "type": "Champion", "x": 1, "y": 1},
+			{"team": "enemy", "type": "Warlord", "x": 3, "y": 1},
+			{"team": "player", "type": "Knight", "x": 2, "y": 1},
+			{"team": "player", "type": "Guard", "x": 4, "y": 3},
+		],
+	},
+]
+
+func current_puzzle() -> Dictionary:
+	return PUZZLES[clampi(puzzle_index, 0, PUZZLES.size() - 1)]
+
 # Optional rule variants, selectable before a match and persisted.
 # permanent_reveal: a piece's rank stays visible forever once seen in combat
 #   (instead of the default temporary flash).
@@ -160,6 +213,16 @@ var variant_assassin_any: bool = false
 # startup instead of the old board-size and roster constants, so variants
 # (Classic, Blitz, and later puzzles) are just different configs.
 func get_match_config() -> Dictionary:
+	if match_mode == "puzzle":
+		var pz = current_puzzle()
+		return {
+			"board_size": pz["board_size"],
+			"deploy_rows": 0,  # puzzles place pieces directly, no deploy phase
+			"pieces": REQUIRED_PIECES.duplicate(),  # full key set for UI labels
+			"chasms": pz.get("chasms", []),
+			"two_square_rule": true,
+			"permanent_reveal": true,  # tactics are full-information
+		}
 	if match_mode == "blitz":
 		return {
 			"board_size": 8,
