@@ -1,7 +1,14 @@
 extends Node2D
 
 const TILE_SIZE = 80
-const BOARD_SIZE = 10
+# Board size and roster are set from the active MatchConfig in _ready, so the
+# same scene runs Classic (10x10) or Blitz (8x8). Defaults match Classic.
+var BOARD_SIZE: int = 10
+var roster: Dictionary = {}
+var chasm_cells: Array = []
+var deploy_rows: int = 4
+var deploy_start_row: int = 6  # first player-deploy row = BOARD_SIZE - deploy_rows
+var two_square_rule: bool = true
 
 var grid = []
 
@@ -49,6 +56,9 @@ var attack_confirm_label: Label
 var _pulse_time: float = 0.0
 
 func _ready():
+	if "--blitz" in OS.get_cmdline_user_args():
+		GameManager.match_mode = "blitz"
+	_apply_match_config()
 	_initialize_grid()
 	_center_camera()
 	_build_chasm_overlays()
@@ -59,7 +69,7 @@ func _ready():
 	_build_rules_overlay()
 	_build_attack_confirm()
 	captured_counts = {GameManager.Team.PLAYER: {}, GameManager.Team.ENEMY: {}}
-	pool_counts = GameManager.REQUIRED_PIECES.duplicate()
+	pool_counts = roster.duplicate()
 	_refresh_tray()
 	_generate_ai_setup()
 	current_turn_label.text = "Deploy Your Army"
@@ -122,13 +132,22 @@ func _debug_play_turns(turns: int):
 			await get_tree().process_frame
 		print("[aitest] ai moved: %s -> %s" % [last_move_from, last_move_to])
 
+func _apply_match_config():
+	var cfg = GameManager.get_match_config()
+	BOARD_SIZE = cfg["board_size"]
+	roster = cfg["pieces"]
+	chasm_cells = cfg["chasms"]
+	deploy_rows = cfg["deploy_rows"]
+	deploy_start_row = BOARD_SIZE - deploy_rows
+	two_square_rule = cfg["two_square_rule"]
+
 func _initialize_grid():
 	grid.resize(BOARD_SIZE)
 	for x in range(BOARD_SIZE):
 		grid[x] = []
 		grid[x].resize(BOARD_SIZE)
 		for y in range(BOARD_SIZE):
-			if (x == 2 or x == 3 or x == 6 or x == 7) and (y == 4 or y == 5):
+			if Vector2i(x, y) in chasm_cells:
 				grid[x][y] = "CHASM"
 			else:
 				grid[x][y] = null
@@ -166,12 +185,13 @@ func _screen_shake(strength: float = 8.0, duration: float = 0.2):
 
 func _build_chasm_overlays():
 	var shader = load("res://chasm.gdshader")
-	for origin in [Vector2(2, 4), Vector2(6, 4)]:
+	# One shimmer tile per chasm cell so any layout is covered.
+	for cell in chasm_cells:
 		var rect = ColorRect.new()
 		rect.material = ShaderMaterial.new()
 		rect.material.shader = shader
-		rect.position = origin * TILE_SIZE
-		rect.size = Vector2(2, 2) * TILE_SIZE
+		rect.position = Vector2(cell) * TILE_SIZE
+		rect.size = Vector2(TILE_SIZE, TILE_SIZE)
 		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(rect)
 
@@ -212,7 +232,7 @@ func _build_deploy_tray():
 	vbox.add_child(HSeparator.new())
 
 	var group = ButtonGroup.new()
-	for type in GameManager.REQUIRED_PIECES.keys():
+	for type in roster.keys():
 		var btn = Button.new()
 		btn.toggle_mode = true
 		btn.button_group = group
@@ -326,7 +346,7 @@ func _build_captured_panel():
 	forces_title.add_theme_font_size_override("font_size", 20)
 	vbox.add_child(forces_title)
 
-	for type in GameManager.REQUIRED_PIECES.keys():
+	for type in roster.keys():
 		var row = Label.new()
 		row.add_theme_font_size_override("font_size", 16)
 		vbox.add_child(row)
@@ -363,7 +383,7 @@ func _build_captured_panel():
 
 func _refresh_forces():
 	for type in forces_labels.keys():
-		var total = GameManager.REQUIRED_PIECES[type]
+		var total = roster[type]
 		var mine = total - captured_counts[GameManager.Team.PLAYER].get(type, 0)
 		var foes = total - captured_counts[GameManager.Team.ENEMY].get(type, 0)
 		forces_labels[type].text = "%2s %-10s %d / %d" % [_rank_display(type), type, mine, foes]
@@ -641,7 +661,7 @@ func _draw():
 	# During setup, show the player's deployable zone
 	if GameManager.current_state == GameManager.GameState.SETUP:
 		for x in range(BOARD_SIZE):
-			for y in range(6, BOARD_SIZE):
+			for y in range(deploy_start_row, BOARD_SIZE):
 				if _piece_at(Vector2i(x, y)) == null:
 					var rect = Rect2(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
 					draw_rect(rect, Color(0.35, 0.55, 0.95, 0.18))
@@ -712,10 +732,16 @@ func _try_deploy_at(pos: Vector2i):
 	_refresh_tray()
 	queue_redraw()
 
+func _roster_total() -> int:
+	var t = 0
+	for c in roster.values():
+		t += c
+	return t
+
 func _player_deploy_positions() -> Array:
 	var empty = []
 	for x in range(BOARD_SIZE):
-		for y in range(6, BOARD_SIZE):
+		for y in range(deploy_start_row, BOARD_SIZE):
 			if grid[x][y] == null:
 				empty.append(Vector2i(x, y))
 	return empty
@@ -726,7 +752,7 @@ func _on_auto_deploy_pressed():
 	var back = []
 	var front = []
 	for pos in empty:
-		if pos.y >= 8:
+		if pos.y >= BOARD_SIZE - 2:
 			back.append(pos)
 		else:
 			front.append(pos)
@@ -762,12 +788,12 @@ func _on_auto_deploy_pressed():
 
 func _on_randomize_pressed():
 	for x in range(BOARD_SIZE):
-		for y in range(6, BOARD_SIZE):
+		for y in range(deploy_start_row, BOARD_SIZE):
 			var piece = _piece_at(Vector2i(x, y))
 			if piece and piece.data.team == GameManager.Team.PLAYER:
 				grid[x][y] = null
 				piece.queue_free()
-	pool_counts = GameManager.REQUIRED_PIECES.duplicate()
+	pool_counts = roster.duplicate()
 	_on_auto_deploy_pressed()
 
 const LAYOUTS_PATH = "user://layouts.cfg"
@@ -775,12 +801,13 @@ const LAYOUTS_PATH = "user://layouts.cfg"
 func _save_layout(slot: int):
 	var pieces = []
 	for x in range(BOARD_SIZE):
-		for y in range(6, BOARD_SIZE):
+		for y in range(deploy_start_row, BOARD_SIZE):
 			var piece = _piece_at(Vector2i(x, y))
 			if piece and piece.data.team == GameManager.Team.PLAYER:
 				pieces.append({"type": piece.data.type, "x": x, "y": y})
-	if pieces.size() != 40:
-		current_turn_label.text = "Place all 40 pieces before saving"
+	var total = _roster_total()
+	if pieces.size() != total:
+		current_turn_label.text = "Place all %d pieces before saving" % total
 		return
 	var cfg = ConfigFile.new()
 	cfg.load(LAYOUTS_PATH)  # ignore error: file may not exist yet
@@ -797,23 +824,23 @@ func _load_layout(slot: int):
 	# Validate: exact required counts, all in bottom 4 rows, unique tiles.
 	var counts = {}
 	var seen = {}
-	var valid = pieces.size() == 40
+	var valid = pieces.size() == _roster_total()
 	for entry in pieces:
 		var pos = Vector2i(entry["x"], entry["y"])
-		if not _in_bounds(pos) or pos.y < 6 or seen.has(pos):
+		if not _in_bounds(pos) or pos.y < deploy_start_row or seen.has(pos):
 			valid = false
 			break
 		seen[pos] = true
 		counts[entry["type"]] = counts.get(entry["type"], 0) + 1
 	if valid:
-		for type in GameManager.REQUIRED_PIECES.keys():
-			if counts.get(type, 0) != GameManager.REQUIRED_PIECES[type]:
+		for type in roster.keys():
+			if counts.get(type, 0) != roster[type]:
 				valid = false
 	if not valid:
 		current_turn_label.text = "Slot %d is empty or invalid" % slot
 		return
 	for x in range(BOARD_SIZE):
-		for y in range(6, BOARD_SIZE):
+		for y in range(deploy_start_row, BOARD_SIZE):
 			var piece = _piece_at(Vector2i(x, y))
 			if piece and piece.data.team == GameManager.Team.PLAYER:
 				grid[x][y] = null
@@ -842,15 +869,17 @@ func _on_start_battle_pressed():
 func _generate_ai_setup():
 	var available_positions = []
 	for x in range(BOARD_SIZE):
-		for y in range(4):
+		for y in range(deploy_rows):
 			available_positions.append(Vector2i(x, y))
 
 	available_positions.shuffle()
 
+	# Enemy back rows (Relic + Wards) are the top ~2 rows of its zone.
+	var back_limit = maxi(0, deploy_rows - 3)
 	var back_positions = []
 	var front_positions = []
 	for pos in available_positions:
-		if pos.y <= 1:
+		if pos.y <= back_limit:
 			back_positions.append(pos)
 		else:
 			front_positions.append(pos)
@@ -866,12 +895,12 @@ func _generate_ai_setup():
 		_spawn_piece(GameManager.Team.ENEMY, type, pos)
 
 	place_piece.call("Relic", true)
-	for i in range(GameManager.REQUIRED_PIECES["Ward"]):
+	for i in range(roster["Ward"]):
 		place_piece.call("Ward", true)
 
-	for type in GameManager.REQUIRED_PIECES.keys():
+	for type in roster.keys():
 		if type != "Relic" and type != "Ward":
-			for i in range(GameManager.REQUIRED_PIECES[type]):
+			for i in range(roster[type]):
 				place_piece.call(type, false)
 
 func _on_piece_dropped(piece):
@@ -966,9 +995,10 @@ func _calculate_valid_moves(piece) -> Array:
 				else:
 					moves.append(current_check)
 
-	var banned = _banned_square(piece)
-	if banned.x >= 0:
-		moves.erase(banned)
+	if two_square_rule:
+		var banned = _banned_square(piece)
+		if banned.x >= 0:
+			moves.erase(banned)
 	return moves
 
 func _team_has_moves(team) -> bool:

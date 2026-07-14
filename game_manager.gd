@@ -37,6 +37,7 @@ func save_settings():
 	cfg.set_value("options", "ai_difficulty", ai_difficulty)
 	cfg.set_value("options", "fast_anim", fast_anim)
 	cfg.set_value("options", "muted", muted)
+	cfg.set_value("options", "match_mode", match_mode)
 	cfg.save(SETTINGS_PATH)
 
 func _load_settings():
@@ -45,6 +46,7 @@ func _load_settings():
 		ai_difficulty = cfg.get_value("options", "ai_difficulty", "easy")
 		fast_anim = cfg.get_value("options", "fast_anim", false)
 		muted = cfg.get_value("options", "muted", false)
+		match_mode = cfg.get_value("options", "match_mode", "classic")
 
 func _ready():
 	_load_settings()
@@ -123,6 +125,50 @@ const REQUIRED_PIECES = {
 	"Runner": 8,
 	"Assassin": 1
 }
+
+# Reduced roster for the faster Blitz variant (8x8 board, 3 deploy rows).
+const BLITZ_PIECES = {
+	"Relic": 1,
+	"Ward": 3,
+	"Champion": 1,
+	"Warlord": 1,
+	"Commander": 1,
+	"Captain": 1,
+	"Knight": 2,
+	"Guard": 2,
+	"Scout": 2,
+	"Rogue": 2,
+	"Runner": 4,
+	"Assassin": 1
+}
+
+# Which match variant to set up. Persisted with the other options.
+var match_mode: String = "classic"
+
+# Full board/roster/rules description for a match. main.gd reads this at
+# startup instead of the old board-size and roster constants, so variants
+# (Classic, Blitz, and later puzzles) are just different configs.
+func get_match_config() -> Dictionary:
+	if match_mode == "blitz":
+		return {
+			"board_size": 8,
+			"deploy_rows": 3,
+			"pieces": BLITZ_PIECES.duplicate(),
+			"chasms": [Vector2i(3, 3), Vector2i(4, 3), Vector2i(3, 4), Vector2i(4, 4)],
+			"two_square_rule": false,
+		}
+	# Classic (default)
+	var chasms = []
+	for cx in [2, 3, 6, 7]:
+		for cy in [4, 5]:
+			chasms.append(Vector2i(cx, cy))
+	return {
+		"board_size": 10,
+		"deploy_rows": 4,
+		"pieces": REQUIRED_PIECES.duplicate(),
+		"chasms": chasms,
+		"two_square_rule": true,
+	}
 
 const PIECE_ICONS = {
 	"Champion": preload("res://assets/pieces/champion.svg"),

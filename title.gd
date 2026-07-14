@@ -25,6 +25,18 @@ func _ready():
 		GameManager.save_settings())
 	$CenterBox.add_child(diff)
 
+	var mode = OptionButton.new()
+	mode.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	mode.custom_minimum_size = Vector2(220, 0)
+	var modes = ["classic", "blitz"]
+	mode.add_item("Mode: Classic")
+	mode.add_item("Mode: Blitz")
+	mode.selected = maxi(0, modes.find(GameManager.match_mode))
+	mode.item_selected.connect(func(idx):
+		GameManager.match_mode = modes[idx]
+		GameManager.save_settings())
+	$CenterBox.add_child(mode)
+
 	var fast = CheckBox.new()
 	fast.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	fast.text = "Fast animations"
