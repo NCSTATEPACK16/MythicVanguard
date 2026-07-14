@@ -38,6 +38,8 @@ func save_settings():
 	cfg.set_value("options", "fast_anim", fast_anim)
 	cfg.set_value("options", "muted", muted)
 	cfg.set_value("options", "match_mode", match_mode)
+	cfg.set_value("options", "variant_permanent_reveal", variant_permanent_reveal)
+	cfg.set_value("options", "variant_assassin_any", variant_assassin_any)
 	cfg.save(SETTINGS_PATH)
 
 func _load_settings():
@@ -47,6 +49,8 @@ func _load_settings():
 		fast_anim = cfg.get_value("options", "fast_anim", false)
 		muted = cfg.get_value("options", "muted", false)
 		match_mode = cfg.get_value("options", "match_mode", "classic")
+		variant_permanent_reveal = cfg.get_value("options", "variant_permanent_reveal", false)
+		variant_assassin_any = cfg.get_value("options", "variant_assassin_any", false)
 
 func _ready():
 	_load_settings()
@@ -145,6 +149,13 @@ const BLITZ_PIECES = {
 # Which match variant to set up. Persisted with the other options.
 var match_mode: String = "classic"
 
+# Optional rule variants, selectable before a match and persisted.
+# permanent_reveal: a piece's rank stays visible forever once seen in combat
+#   (instead of the default temporary flash).
+# assassin_any: the Assassin defeats ANY piece it attacks, not just the Champion.
+var variant_permanent_reveal: bool = false
+var variant_assassin_any: bool = false
+
 # Full board/roster/rules description for a match. main.gd reads this at
 # startup instead of the old board-size and roster constants, so variants
 # (Classic, Blitz, and later puzzles) are just different configs.
@@ -156,6 +167,7 @@ func get_match_config() -> Dictionary:
 			"pieces": BLITZ_PIECES.duplicate(),
 			"chasms": [Vector2i(3, 3), Vector2i(4, 3), Vector2i(3, 4), Vector2i(4, 4)],
 			"two_square_rule": false,
+			"permanent_reveal": variant_permanent_reveal,
 		}
 	# Classic (default)
 	var chasms = []
@@ -168,6 +180,7 @@ func get_match_config() -> Dictionary:
 		"pieces": REQUIRED_PIECES.duplicate(),
 		"chasms": chasms,
 		"two_square_rule": true,
+		"permanent_reveal": variant_permanent_reveal,
 	}
 
 const PIECE_ICONS = {
@@ -201,6 +214,10 @@ func resolve_combat(attacker: PieceData, defender: PieceData) -> String:
 	# Capturing the Relic ends the game immediately
 	if defender.type == "Relic":
 		return "game_over"
+
+	# Variant: the Assassin is deadly to anything it attacks.
+	if variant_assassin_any and attacker.type == "Assassin":
+		return "attacker_wins"
 
 	# Wards defeat everything except Rogues
 	if defender.type == "Ward":

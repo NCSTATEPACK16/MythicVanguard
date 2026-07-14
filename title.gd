@@ -46,6 +46,24 @@ func _ready():
 		GameManager.save_settings())
 	$CenterBox.add_child(fast)
 
+	var reveal = CheckBox.new()
+	reveal.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	reveal.text = "Variant: permanent reveal"
+	reveal.button_pressed = GameManager.variant_permanent_reveal
+	reveal.toggled.connect(func(on):
+		GameManager.variant_permanent_reveal = on
+		GameManager.save_settings())
+	$CenterBox.add_child(reveal)
+
+	var deadly = CheckBox.new()
+	deadly.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	deadly.text = "Variant: deadly Assassin"
+	deadly.button_pressed = GameManager.variant_assassin_any
+	deadly.toggled.connect(func(on):
+		GameManager.variant_assassin_any = on
+		GameManager.save_settings())
+	$CenterBox.add_child(deadly)
+
 	# Gentle title pulse
 	var title = $CenterBox/Title
 	title.pivot_offset = title.size / 2.0

@@ -9,6 +9,7 @@ var chasm_cells: Array = []
 var deploy_rows: int = 4
 var deploy_start_row: int = 6  # first player-deploy row = BOARD_SIZE - deploy_rows
 var two_square_rule: bool = true
+var permanent_reveal: bool = false
 
 var grid = []
 
@@ -58,6 +59,8 @@ var _pulse_time: float = 0.0
 func _ready():
 	if "--blitz" in OS.get_cmdline_user_args():
 		GameManager.match_mode = "blitz"
+	if "--reveal" in OS.get_cmdline_user_args():
+		GameManager.variant_permanent_reveal = true
 	_apply_match_config()
 	_initialize_grid()
 	_center_camera()
@@ -140,6 +143,7 @@ func _apply_match_config():
 	deploy_rows = cfg["deploy_rows"]
 	deploy_start_row = BOARD_SIZE - deploy_rows
 	two_square_rule = cfg["two_square_rule"]
+	permanent_reveal = cfg["permanent_reveal"]
 
 func _initialize_grid():
 	grid.resize(BOARD_SIZE)
@@ -1051,11 +1055,15 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 		bump_tween.tween_property(piece_to_move, "global_position", halfway_pos, GameManager.anim_time(0.2)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		await bump_tween.finished
 
-		# Reveal both ranks for a moment only; they hide again after the
-		# flash, so players have to remember what they saw. The AI records
-		# what it just learned in its own memory.
-		target_tile.flash_reveal(COMBAT_REVEAL_TIME)
-		piece_to_move.flash_reveal(COMBAT_REVEAL_TIME)
+		# Reveal both ranks. By default the reveal is only a flash — they hide
+		# again so players must remember — but the permanent-reveal variant
+		# keeps them face-up. The AI records what it learned either way.
+		if permanent_reveal:
+			target_tile.reveal_permanently()
+			piece_to_move.reveal_permanently()
+		else:
+			target_tile.flash_reveal(COMBAT_REVEAL_TIME)
+			piece_to_move.flash_reveal(COMBAT_REVEAL_TIME)
 		ai.observe_combat(piece_to_move.data, target_tile.data)
 		_show_combat_result(piece_to_move.data, target_tile.data, result)
 		_log_move(is_player, old_pos, target_pos, piece_to_move.data, target_tile.data, result)
@@ -1284,6 +1292,13 @@ func _debug_rules_test():
 	_rt_assert(rc.call("Guard", "Knight") == "defender_wins", "lower rank loses")
 	_rt_assert(rc.call("Knight", "Guard") == "attacker_wins", "higher rank wins")
 	_rt_assert(rc.call("Assassin", "Warlord") == "defender_wins", "assassin only beats champion")
+
+	# Rule variant: the deadly Assassin defeats anything it attacks.
+	GameManager.variant_assassin_any = true
+	_rt_assert(rc.call("Assassin", "Warlord") == "attacker_wins", "deadly-assassin variant beats warlord")
+	_rt_assert(rc.call("Assassin", "Ward") == "attacker_wins", "deadly-assassin variant beats ward")
+	GameManager.variant_assassin_any = false
+	_rt_assert(rc.call("Assassin", "Warlord") == "defender_wins", "default assassin still loses to warlord")
 
 	# AI memory: ranks seen in combat are remembered per difficulty.
 	# Hard never forgets; easy rolls to forget each piece every turn.

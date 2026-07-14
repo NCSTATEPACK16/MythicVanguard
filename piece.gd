@@ -92,6 +92,13 @@ func hit_flash():
 	var tw = create_tween()
 	tw.tween_property(token, "self_modulate", base, GameManager.anim_time(0.3)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
+# Permanent-reveal variant: show the rank and keep it shown, cancelling any
+# pending flash-hide.
+func reveal_permanently():
+	_reveal_gen += 1
+	data.is_revealed = true
+	_update_visuals()
+
 func _update_visuals():
 	if data.is_revealed or data.team == PieceData.Team.PLAYER:
 		icon.texture = data.texture
