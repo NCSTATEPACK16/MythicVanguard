@@ -30,9 +30,28 @@ const ICON_DARK = Color(0.08, 0.08, 0.14)
 
 func _ready():
 	input_event.connect(_on_input_event)
+	mouse_entered.connect(_on_mouse_entered)
+	mouse_exited.connect(_on_mouse_exited)
 	if data:
 		_update_visuals()
 	_start_idle_breathe()
+
+func _interactable() -> bool:
+	return GameManager.current_state == GameManager.GameState.SETUP or GameManager.current_state == GameManager.GameState.PLAYER_TURN
+
+# Gentle pop on hover for tactile feedback. Scales the piece root so it does
+# not fight the idle-breathe tween running on Visuals.
+func _on_mouse_entered():
+	if not _interactable() or is_dragging:
+		return
+	var tw = create_tween()
+	tw.tween_property(self, "scale", Vector2(1.09, 1.09), 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+func _on_mouse_exited():
+	if is_dragging:
+		return
+	var tw = create_tween()
+	tw.tween_property(self, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 func _start_idle_breathe():
 	# Small random delay so pieces don't all breathe perfectly in sync
@@ -63,6 +82,15 @@ func flash_reveal(duration: float):
 		return
 	data.is_revealed = false
 	_update_visuals()
+
+# Punch the token to pure white and fade it back — a hit flash for the moment
+# a piece loses a combat. The token's stylebox bg is white, so self_modulate
+# doubles as its color, and pushing it to white reads as an impact flash.
+func hit_flash():
+	var base = token.self_modulate
+	token.self_modulate = Color(1, 1, 1, 1)
+	var tw = create_tween()
+	tw.tween_property(token, "self_modulate", base, GameManager.anim_time(0.3)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 func _update_visuals():
 	if data.is_revealed or data.team == PieceData.Team.PLAYER:

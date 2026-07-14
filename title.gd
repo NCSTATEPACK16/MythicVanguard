@@ -15,11 +15,13 @@ func _ready():
 	var diff = OptionButton.new()
 	diff.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	diff.custom_minimum_size = Vector2(220, 0)
+	var difficulties = ["easy", "hard", "legendary"]
 	diff.add_item("AI: Easy")
 	diff.add_item("AI: Hard")
-	diff.selected = 1 if GameManager.ai_difficulty == "hard" else 0
+	diff.add_item("AI: Legendary")
+	diff.selected = maxi(0, difficulties.find(GameManager.ai_difficulty))
 	diff.item_selected.connect(func(idx):
-		GameManager.ai_difficulty = "hard" if idx == 1 else "easy"
+		GameManager.ai_difficulty = difficulties[idx]
 		GameManager.save_settings())
 	$CenterBox.add_child(diff)
 

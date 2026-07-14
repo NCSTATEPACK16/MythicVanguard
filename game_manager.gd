@@ -57,7 +57,7 @@ func _ready():
 	_music_player = AudioStreamPlayer.new()
 	_music_player.stream = music_stream
 	_music_player.bus = "Music"
-	_music_player.volume_db = -10.0
+	_music_player.volume_db = -12.0
 	add_child(_music_player)
 	_apply_mute()
 
@@ -66,13 +66,23 @@ func start_music():
 	if not _music_player.playing:
 		_music_player.play()
 
-func play_sfx(sfx_name: String):
+func play_sfx(sfx_name: String, pitch: float = 1.0):
 	var player = AudioStreamPlayer.new()
 	player.stream = SFX[sfx_name]
 	player.bus = "SFX"
+	player.pitch_scale = pitch
 	add_child(player)
 	player.finished.connect(player.queue_free)
 	player.play()
+
+# Swell the music louder as the battle thins out. `frac` is 0 (full boards)
+# to 1 (many losses); the volume eases up so late-game feels more intense.
+func set_music_intensity(frac: float):
+	if _music_player == null:
+		return
+	frac = clampf(frac, 0.0, 1.0)
+	var target_db = lerpf(-12.0, -3.0, frac)
+	create_tween().tween_property(_music_player, "volume_db", target_db, 0.8)
 
 func toggle_mute() -> bool:
 	muted = not muted

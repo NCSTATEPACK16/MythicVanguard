@@ -74,6 +74,8 @@ func _ready():
 func _debug_screenshot():
 	await get_tree().create_timer(1.0).timeout
 	var args = OS.get_cmdline_user_args()
+	if "--legendary" in args:
+		GameManager.ai_difficulty = "legendary"
 	if "--autodeploy" in args:
 		_on_auto_deploy_pressed()
 		_on_start_battle_pressed()
@@ -83,6 +85,9 @@ func _debug_screenshot():
 	if "--victory" in args:
 		GameManager.current_state = GameManager.GameState.GAME_OVER
 		_show_victory_screen(true)
+	if "--defeat" in args:
+		GameManager.current_state = GameManager.GameState.GAME_OVER
+		_show_victory_screen(false)
 	if "--rulesoverlay" in args:
 		rules_overlay.visible = true
 	await get_tree().create_timer(1.0).timeout
@@ -145,6 +150,19 @@ func _tile_center(pos: Vector2i) -> Vector2:
 
 func _center_camera():
 	camera.position = Vector2(BOARD_SIZE * TILE_SIZE / 2.0, BOARD_SIZE * TILE_SIZE / 2.0)
+
+# Quick decaying camera shake for combat impacts. Tweens the camera offset
+# through a few random points, then settles back to zero so board centering
+# (which uses position) is untouched.
+func _screen_shake(strength: float = 8.0, duration: float = 0.2):
+	var steps = 6
+	var step_t = GameManager.anim_time(duration / steps)
+	var tw = create_tween()
+	for i in range(steps):
+		var mag = strength * (1.0 - float(i) / steps)
+		var off = Vector2(randf_range(-mag, mag), randf_range(-mag, mag))
+		tw.tween_property(camera, "offset", off, step_t)
+	tw.tween_property(camera, "offset", Vector2.ZERO, step_t)
 
 func _build_chasm_overlays():
 	var shader = load("res://chasm.gdshader")
@@ -350,9 +368,14 @@ func _refresh_forces():
 		var foes = total - captured_counts[GameManager.Team.ENEMY].get(type, 0)
 		forces_labels[type].text = "%2s %-10s %d / %d" % [_rank_display(type), type, mine, foes]
 
+var _captures_seen: int = 0
+
 func _record_capture(piece):
 	var counts = captured_counts[piece.data.team]
 	counts[piece.data.type] = counts.get(piece.data.type, 0) + 1
+	# Ramp music intensity as losses mount (full swell by ~30 captures).
+	_captures_seen += 1
+	GameManager.set_music_intensity(_captures_seen / 30.0)
 	_refresh_forces()
 	var entry = Label.new()
 	entry.text = "%s  %s" % [_rank_display(piece.data.type), piece.data.type]
@@ -631,13 +654,18 @@ func _draw():
 		draw_rect(to_rect, Color(1.0, 0.85, 0.2, 0.9), false, 4.0)
 
 	if GameManager.current_state == GameManager.GameState.PLAYER_TURN:
-		var pulse = 0.55 + 0.25 * sin(_pulse_time * 5.0)
+		var pulse01 = 0.5 + 0.5 * sin(_pulse_time * 5.0)
+		var pulse = 0.55 + 0.25 * (pulse01 * 2.0 - 1.0)
 		for pos in valid_moves:
 			var center = _tile_center(pos)
+			var rect = Rect2(pos.x * TILE_SIZE, pos.y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
 			if _piece_at(pos) != null:
-				# Attack target: red ring
+				# Attack target: glowing red tile + pulsing ring
+				draw_rect(rect, Color(0.95, 0.25, 0.2, 0.10 + 0.10 * pulse01))
 				draw_arc(center, 27.0, 0.0, TAU, 40, Color(0.95, 0.25, 0.2, pulse), 4.0)
 			else:
+				# Reachable tile: soft glow + marker dot
+				draw_rect(rect, Color(0.95, 0.92, 0.55, 0.09 + 0.09 * pulse01))
 				draw_circle(center, 13.0, Color(0.95, 0.92, 0.55, pulse))
 
 		if armed_attack.x >= 0:
@@ -649,8 +677,10 @@ func _draw():
 
 		if selected_piece:
 			var pos = selected_piece.current_grid_pos
-			var rect = Rect2(pos.x * TILE_SIZE + 3, pos.y * TILE_SIZE + 3, TILE_SIZE - 6, TILE_SIZE - 6)
-			draw_rect(rect, Color(1.0, 0.85, 0.2, 0.95), false, 4.0)
+			# Pulse the selection outline so the active piece breathes.
+			var inset = 3.0 + 2.0 * pulse01
+			var rect = Rect2(pos.x * TILE_SIZE + inset, pos.y * TILE_SIZE + inset, TILE_SIZE - inset * 2.0, TILE_SIZE - inset * 2.0)
+			draw_rect(rect, Color(1.0, 0.85, 0.2, 0.7 + 0.25 * pulse01), false, 4.0)
 
 # ---------------------------------------------------------------- setup phase
 
@@ -1002,6 +1032,20 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 
 		await get_tree().create_timer(GameManager.anim_time(1.0)).timeout
 
+		# Flash the losing piece(s) white and shake the board, then let them
+		# explode. Gives the clash a beat of impact before the smoke.
+		var losers = []
+		if result == "attacker_wins" or result == "game_over":
+			losers = [target_tile]
+		elif result == "defender_wins":
+			losers = [piece_to_move]
+		elif result == "draw":
+			losers = [target_tile, piece_to_move]
+		for loser in losers:
+			loser.hit_flash()
+		_screen_shake(9.0, 0.22)
+		await get_tree().create_timer(GameManager.anim_time(0.25)).timeout
+
 		if result == "attacker_wins" or result == "game_over":
 			_explode_at(target_tile)
 			_record_capture(target_tile)
@@ -1076,7 +1120,11 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 			queue_redraw()
 
 func _explode_at(piece):
-	GameManager.play_sfx("destroyed")
+	# Pitch the destruction cue by whose piece fell: a brighter ring when an
+	# enemy dies, a darker one when you lose a piece — an outcome stinger with
+	# no extra audio assets.
+	var pitch = 1.12 if piece.data.team == GameManager.Team.ENEMY else 0.85
+	GameManager.play_sfx("destroyed", pitch)
 	var explosion = ExplosionScene.instantiate()
 	explosion.global_position = piece.global_position
 	explosion.color = Color.TOMATO if piece.data.team == GameManager.Team.ENEMY else Color.CORNFLOWER_BLUE
@@ -1098,7 +1146,20 @@ func _show_victory_screen(player_won: bool):
 	var overlay = ColorRect.new()
 	overlay.color = Color(0, 0, 0, 0.7)
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.modulate.a = 0.0
 	$CanvasLayer.add_child(overlay)
+	create_tween().tween_property(overlay, "modulate:a", 1.0, 0.35)
+
+	# Defeat: a bloody vignette closes in behind the message.
+	if not player_won:
+		var vignette = ColorRect.new()
+		vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+		vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vignette.material = ShaderMaterial.new()
+		vignette.material.shader = load("res://vignette.gdshader")
+		vignette.modulate.a = 0.0
+		overlay.add_child(vignette)
+		create_tween().tween_property(vignette, "modulate:a", 1.0, 0.8)
 
 	var vbox = VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_CENTER)
@@ -1117,6 +1178,9 @@ func _show_victory_screen(player_won: bool):
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(label)
 
+	# Punch the banner in from oversized so the result lands with weight.
+	_punch_banner(label)
+
 	var again = Button.new()
 	again.text = "Play Again"
 	again.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -1127,20 +1191,33 @@ func _show_victory_screen(player_won: bool):
 	vbox.add_child(again)
 
 	if player_won:
-		for i in range(3):
-			var confetti = ExplosionScene.instantiate()
-			confetti.global_position = Vector2(960, 540)
-			confetti.amount = 200
-			confetti.lifetime = 2.5
-			confetti.spread = 360
-			confetti.initial_velocity_min = 300
-			confetti.initial_velocity_max = 800
-			confetti.scale_amount_min = 10
-			confetti.scale_amount_max = 20
+		var colors = [Color.RED, Color.GREEN, Color.CORNFLOWER_BLUE, Color.GOLD, Color.PURPLE, Color.ORANGE]
+		# A central burst plus two flanking cannons for a fuller celebration.
+		var origins = [Vector2(960, 540), Vector2(360, 760), Vector2(1560, 760)]
+		for j in range(origins.size()):
+			for i in range(colors.size()):
+				var confetti = ExplosionScene.instantiate()
+				confetti.global_position = origins[j]
+				confetti.amount = 220
+				confetti.lifetime = 2.8
+				confetti.spread = 360
+				confetti.initial_velocity_min = 300
+				confetti.initial_velocity_max = 850
+				confetti.scale_amount_min = 10
+				confetti.scale_amount_max = 20
+				confetti.color = colors[i]
+				$CanvasLayer.add_child(confetti)
 
-			var colors = [Color.RED, Color.GREEN, Color.CORNFLOWER_BLUE, Color.GOLD, Color.PURPLE]
-			confetti.color = colors[i % colors.size()]
-			$CanvasLayer.add_child(confetti)
+# Scale-punch a banner in from oversized, settling with a back-ease so the
+# result lands with weight. Pivot is set after layout so it scales from center.
+func _punch_banner(label: Label):
+	await get_tree().process_frame
+	if not is_instance_valid(label):
+		return
+	label.pivot_offset = label.size / 2.0
+	label.scale = Vector2(1.7, 1.7)
+	var tw = create_tween()
+	tw.tween_property(label, "scale", Vector2.ONE, 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 # ---------------------------------------------------------------- rules test
 # `godot --headless --path . -- --rulestest` asserts the ruleset and quits
@@ -1260,5 +1337,25 @@ func _debug_rules_test():
 	_rt_assert(fr.data.is_revealed, "overlapping flash keeps the rank shown")
 	await get_tree().create_timer(0.3).timeout
 	_rt_assert(not fr.data.is_revealed, "extended flash still hides in the end")
+
+	# Legendary lookahead: it must not take the forward advance into a square
+	# where a stronger player piece captures it next turn — the greedy tiers
+	# walk right in for the progress bonus.
+	for x in range(BOARD_SIZE):
+		for y in range(BOARD_SIZE):
+			var pc2 = _piece_at(Vector2i(x, y))
+			if pc2:
+				grid[x][y] = null
+				pc2.queue_free()
+	_spawn_piece(GameManager.Team.ENEMY, "Warlord", Vector2i(5, 4))
+	_spawn_piece(GameManager.Team.PLAYER, "Champion", Vector2i(5, 6))
+	var pre_diff = GameManager.ai_difficulty
+	GameManager.ai_difficulty = "hard"
+	var hard_move = ai.choose_move(self)
+	_rt_assert(hard_move.get("target") == Vector2i(5, 5), "hard AI advances into the trap")
+	GameManager.ai_difficulty = "legendary"
+	var leg_move = ai.choose_move(self)
+	_rt_assert(leg_move.get("target") != Vector2i(5, 5), "legendary AI avoids hanging its warlord")
+	GameManager.ai_difficulty = pre_diff
 
 	_rt_finish()
