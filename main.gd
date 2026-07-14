@@ -23,6 +23,10 @@ var pool_counts = {}
 var selected_deploy_type: String = ""
 var tray_buttons = {}
 
+# Setup-phase drag/swap tracking
+var dragging_piece = null   # the player piece currently being dragged, or null
+var jiggle_target = null    # the piece currently jiggling as a swap target, or null
+
 # Play phase state
 var selected_piece = null
 var valid_moves = []
@@ -214,6 +218,37 @@ func _process(delta):
 	if GameManager.current_state == GameManager.GameState.PLAYER_TURN and valid_moves.size() > 0:
 		_pulse_time += delta
 		queue_redraw()
+	# Setup: jiggle whichever piece a dragged token hovers over, so it reads as
+	# "release here to swap" (iOS home-screen feel).
+	elif GameManager.current_state == GameManager.GameState.SETUP and dragging_piece != null:
+		_update_swap_hover()
+
+func _on_piece_dragged(piece):
+	if GameManager.current_state == GameManager.GameState.SETUP:
+		dragging_piece = piece
+
+func _update_swap_hover():
+	var occupant = _swap_target_under(dragging_piece)
+	if occupant == jiggle_target:
+		return
+	if jiggle_target != null:
+		jiggle_target.stop_jiggle()
+	jiggle_target = occupant
+	if jiggle_target != null:
+		jiggle_target.start_jiggle()
+
+# The player piece a dragged token currently overlaps and could swap with, or
+# null. A valid swap target sits in bounds, in the player's deploy rows, and is
+# a different piece than the one being dragged.
+func _swap_target_under(piece):
+	var pos = piece.global_position
+	var tile = Vector2i(int(pos.x / TILE_SIZE), int(pos.y / TILE_SIZE))
+	if not _in_bounds(tile) or tile.y < deploy_start_row:
+		return null
+	var occupant = grid[tile.x][tile.y]
+	if occupant == null or occupant == piece:
+		return null
+	return occupant
 
 # ---------------------------------------------------------------- UI building
 
@@ -634,7 +669,7 @@ func _coord(pos: Vector2i) -> String:
 func _log_move(is_player: bool, from: Vector2i, to: Vector2i, attacker, defender, result: String):
 	move_number += 1
 	var who = "You" if is_player else "Enemy"
-	var text = "%d. %s %s→%s" % [move_number, who, _coord(from), _coord(to)]
+	var text = "%d. %s %s->%s" % [move_number, who, _coord(from), _coord(to)]
 	if defender != null:
 		var outcome = {"attacker_wins": "attacker wins", "defender_wins": "defender wins",
 			"draw": "both fall", "game_over": "Relic captured!"}[result]
@@ -728,6 +763,7 @@ func _spawn_piece(team, type: String, pos: Vector2i):
 	piece.piece_clicked.connect(_on_piece_clicked)
 	if team == GameManager.Team.PLAYER:
 		piece.piece_dropped.connect(_on_piece_dropped)
+		piece.piece_dragged.connect(_on_piece_dragged)
 	return piece
 
 func _on_tray_type_pressed(type: String):
@@ -970,22 +1006,44 @@ func _show_puzzle_failed():
 	vbox.add_child(retry)
 
 func _on_piece_dropped(piece):
+	# End of a drag: stop any hover jiggle and clear drag tracking first.
+	dragging_piece = null
+	if jiggle_target != null:
+		jiggle_target.stop_jiggle()
+		jiggle_target = null
+
 	if GameManager.current_state != GameManager.GameState.SETUP:
 		return
 
+	var from = piece.current_grid_pos
 	var drop_pos = piece.global_position
 	var target = Vector2i(int(drop_pos.x / TILE_SIZE), int(drop_pos.y / TILE_SIZE))
 
-	if _in_bounds(target) and target.y >= 6 and grid[target.x][target.y] == null:
-		grid[piece.current_grid_pos.x][piece.current_grid_pos.y] = null
-		var tween = create_tween()
-		tween.tween_property(piece, "global_position", _tile_center(target), 0.1).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		piece.current_grid_pos = target
-		grid[target.x][target.y] = piece
+	if _in_bounds(target) and target.y >= deploy_start_row and target != from:
+		var occupant = grid[target.x][target.y]
+		if occupant == null:
+			# Move into the empty square.
+			grid[from.x][from.y] = null
+			grid[target.x][target.y] = piece
+			piece.current_grid_pos = target
+			var tw = create_tween()
+			tw.tween_property(piece, "global_position", _tile_center(target), 0.1).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		else:
+			# Swap: the two pieces trade squares.
+			grid[from.x][from.y] = occupant
+			grid[target.x][target.y] = piece
+			piece.current_grid_pos = target
+			occupant.current_grid_pos = from
+			var tw = create_tween()
+			tw.tween_property(piece, "global_position", _tile_center(target), 0.1).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			var tw2 = create_tween()
+			tw2.tween_property(occupant, "global_position", _tile_center(from), 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			occupant.settle_shake()
+			GameManager.play_sfx("deploy")
 	else:
-		# Snap back to where it came from
-		var tween = create_tween()
-		tween.tween_property(piece, "global_position", _tile_center(piece.current_grid_pos), 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		# Snap back to where it came from.
+		var tw = create_tween()
+		tw.tween_property(piece, "global_position", _tile_center(from), 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	queue_redraw()
 
 # ---------------------------------------------------------------- play phase
@@ -1486,5 +1544,49 @@ func _debug_rules_test():
 	var relic = _spawn_piece(GameManager.Team.ENEMY, "Relic", Vector2i(0, 0))
 	_rt_assert(Vector2i(0, 0) in _calculate_valid_moves(pr), "puzzle: runner can reach the relic")
 	_rt_assert(GameManager.resolve_combat(pr.data, relic.data) == "game_over", "puzzle: capturing the relic wins")
+
+	# Setup drag/swap: rearranging pieces on an already-full board. Clear the
+	# board, then drive _on_piece_dropped the way a released drag does.
+	for x in range(BOARD_SIZE):
+		for y in range(BOARD_SIZE):
+			var pc4 = _piece_at(Vector2i(x, y))
+			if pc4:
+				grid[x][y] = null
+				pc4.queue_free()
+	var prev_state = GameManager.current_state
+	GameManager.current_state = GameManager.GameState.SETUP
+	var back := BOARD_SIZE - 1
+	var pa = _spawn_piece(GameManager.Team.PLAYER, "Knight", Vector2i(0, back))
+	var pb = _spawn_piece(GameManager.Team.PLAYER, "Guard", Vector2i(1, back))
+
+	# Hover resolver picks the occupant under a dragged token.
+	pa.global_position = _tile_center(Vector2i(1, back))
+	_rt_assert(_swap_target_under(pa) == pb, "hover resolver finds the occupied swap target")
+	pa.global_position = _tile_center(Vector2i(4, back))
+	_rt_assert(_swap_target_under(pa) == null, "hover resolver ignores empty squares")
+	pa.global_position = _tile_center(Vector2i(0, back))
+	_rt_assert(_swap_target_under(pa) == null, "hover resolver ignores the dragged piece's own square")
+
+	# Drop onto an occupied square swaps the two pieces.
+	pa.global_position = _tile_center(Vector2i(1, back))
+	_on_piece_dropped(pa)
+	_rt_assert(grid[1][back] == pa and grid[0][back] == pb, "swap exchanges the two grid cells")
+	_rt_assert(pa.current_grid_pos == Vector2i(1, back) and pb.current_grid_pos == Vector2i(0, back), "swap updates both grid positions")
+
+	# Drop onto an empty in-half square moves without disturbing others.
+	pa.global_position = _tile_center(Vector2i(3, back))
+	_on_piece_dropped(pa)
+	_rt_assert(grid[1][back] == null and grid[3][back] == pa and pa.current_grid_pos == Vector2i(3, back), "drop on empty square moves the piece")
+
+	# Drop outside the deploy rows snaps back: grid is untouched.
+	pa.global_position = _tile_center(Vector2i(3, 0))
+	_on_piece_dropped(pa)
+	_rt_assert(grid[3][back] == pa and pa.current_grid_pos == Vector2i(3, back), "invalid drop snaps back, grid unchanged")
+	GameManager.current_state = prev_state
+
+	# Move-history glyph fix: the arrow is ASCII, so no missing-glyph tofu.
+	_log_move(true, Vector2i(0, back), Vector2i(0, back - 1), null, null, "")
+	var logged = history_list.get_child(history_list.get_child_count() - 1).text
+	_rt_assert(logged.contains("->") and not logged.contains("→"), "move history uses ascii arrow (no tofu)")
 
 	_rt_finish()
