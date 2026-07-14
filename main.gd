@@ -1,7 +1,20 @@
 extends Node2D
 
 const TILE_SIZE = 80
-const BOARD_SIZE = 10
+# Board size and roster are set from the active MatchConfig in _ready, so the
+# same scene runs Classic (10x10) or Blitz (8x8). Defaults match Classic.
+var BOARD_SIZE: int = 10
+var roster: Dictionary = {}
+var chasm_cells: Array = []
+var deploy_rows: int = 4
+var deploy_start_row: int = 6  # first player-deploy row = BOARD_SIZE - deploy_rows
+var two_square_rule: bool = true
+var permanent_reveal: bool = false
+
+# Puzzle mode: a fixed position with a "capture the Relic in N moves" goal.
+var puzzle_mode: bool = false
+var puzzle_goal_moves: int = 1
+var _puzzle_player_moves: int = 0
 
 var grid = []
 
@@ -49,6 +62,13 @@ var attack_confirm_label: Label
 var _pulse_time: float = 0.0
 
 func _ready():
+	if "--blitz" in OS.get_cmdline_user_args():
+		GameManager.match_mode = "blitz"
+	if "--reveal" in OS.get_cmdline_user_args():
+		GameManager.variant_permanent_reveal = true
+	if "--puzzle" in OS.get_cmdline_user_args():
+		GameManager.match_mode = "puzzle"
+	_apply_match_config()
 	_initialize_grid()
 	_center_camera()
 	_build_chasm_overlays()
@@ -59,10 +79,13 @@ func _ready():
 	_build_rules_overlay()
 	_build_attack_confirm()
 	captured_counts = {GameManager.Team.PLAYER: {}, GameManager.Team.ENEMY: {}}
-	pool_counts = GameManager.REQUIRED_PIECES.duplicate()
+	pool_counts = roster.duplicate()
 	_refresh_tray()
-	_generate_ai_setup()
-	current_turn_label.text = "Deploy Your Army"
+	if GameManager.match_mode == "puzzle":
+		_setup_puzzle()
+	else:
+		_generate_ai_setup()
+		current_turn_label.text = "Deploy Your Army"
 	queue_redraw()
 	if "--screenshot" in OS.get_cmdline_user_args():
 		_debug_screenshot()
@@ -74,6 +97,8 @@ func _ready():
 func _debug_screenshot():
 	await get_tree().create_timer(1.0).timeout
 	var args = OS.get_cmdline_user_args()
+	if "--legendary" in args:
+		GameManager.ai_difficulty = "legendary"
 	if "--autodeploy" in args:
 		_on_auto_deploy_pressed()
 		_on_start_battle_pressed()
@@ -83,6 +108,9 @@ func _debug_screenshot():
 	if "--victory" in args:
 		GameManager.current_state = GameManager.GameState.GAME_OVER
 		_show_victory_screen(true)
+	if "--defeat" in args:
+		GameManager.current_state = GameManager.GameState.GAME_OVER
+		_show_victory_screen(false)
 	if "--rulesoverlay" in args:
 		rules_overlay.visible = true
 	await get_tree().create_timer(1.0).timeout
@@ -117,13 +145,23 @@ func _debug_play_turns(turns: int):
 			await get_tree().process_frame
 		print("[aitest] ai moved: %s -> %s" % [last_move_from, last_move_to])
 
+func _apply_match_config():
+	var cfg = GameManager.get_match_config()
+	BOARD_SIZE = cfg["board_size"]
+	roster = cfg["pieces"]
+	chasm_cells = cfg["chasms"]
+	deploy_rows = cfg["deploy_rows"]
+	deploy_start_row = BOARD_SIZE - deploy_rows
+	two_square_rule = cfg["two_square_rule"]
+	permanent_reveal = cfg["permanent_reveal"]
+
 func _initialize_grid():
 	grid.resize(BOARD_SIZE)
 	for x in range(BOARD_SIZE):
 		grid[x] = []
 		grid[x].resize(BOARD_SIZE)
 		for y in range(BOARD_SIZE):
-			if (x == 2 or x == 3 or x == 6 or x == 7) and (y == 4 or y == 5):
+			if Vector2i(x, y) in chasm_cells:
 				grid[x][y] = "CHASM"
 			else:
 				grid[x][y] = null
@@ -146,14 +184,28 @@ func _tile_center(pos: Vector2i) -> Vector2:
 func _center_camera():
 	camera.position = Vector2(BOARD_SIZE * TILE_SIZE / 2.0, BOARD_SIZE * TILE_SIZE / 2.0)
 
+# Quick decaying camera shake for combat impacts. Tweens the camera offset
+# through a few random points, then settles back to zero so board centering
+# (which uses position) is untouched.
+func _screen_shake(strength: float = 8.0, duration: float = 0.2):
+	var steps = 6
+	var step_t = GameManager.anim_time(duration / steps)
+	var tw = create_tween()
+	for i in range(steps):
+		var mag = strength * (1.0 - float(i) / steps)
+		var off = Vector2(randf_range(-mag, mag), randf_range(-mag, mag))
+		tw.tween_property(camera, "offset", off, step_t)
+	tw.tween_property(camera, "offset", Vector2.ZERO, step_t)
+
 func _build_chasm_overlays():
 	var shader = load("res://chasm.gdshader")
-	for origin in [Vector2(2, 4), Vector2(6, 4)]:
+	# One shimmer tile per chasm cell so any layout is covered.
+	for cell in chasm_cells:
 		var rect = ColorRect.new()
 		rect.material = ShaderMaterial.new()
 		rect.material.shader = shader
-		rect.position = origin * TILE_SIZE
-		rect.size = Vector2(2, 2) * TILE_SIZE
+		rect.position = Vector2(cell) * TILE_SIZE
+		rect.size = Vector2(TILE_SIZE, TILE_SIZE)
 		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(rect)
 
@@ -194,7 +246,7 @@ func _build_deploy_tray():
 	vbox.add_child(HSeparator.new())
 
 	var group = ButtonGroup.new()
-	for type in GameManager.REQUIRED_PIECES.keys():
+	for type in roster.keys():
 		var btn = Button.new()
 		btn.toggle_mode = true
 		btn.button_group = group
@@ -308,7 +360,7 @@ func _build_captured_panel():
 	forces_title.add_theme_font_size_override("font_size", 20)
 	vbox.add_child(forces_title)
 
-	for type in GameManager.REQUIRED_PIECES.keys():
+	for type in roster.keys():
 		var row = Label.new()
 		row.add_theme_font_size_override("font_size", 16)
 		vbox.add_child(row)
@@ -345,14 +397,19 @@ func _build_captured_panel():
 
 func _refresh_forces():
 	for type in forces_labels.keys():
-		var total = GameManager.REQUIRED_PIECES[type]
+		var total = roster[type]
 		var mine = total - captured_counts[GameManager.Team.PLAYER].get(type, 0)
 		var foes = total - captured_counts[GameManager.Team.ENEMY].get(type, 0)
 		forces_labels[type].text = "%2s %-10s %d / %d" % [_rank_display(type), type, mine, foes]
 
+var _captures_seen: int = 0
+
 func _record_capture(piece):
 	var counts = captured_counts[piece.data.team]
 	counts[piece.data.type] = counts.get(piece.data.type, 0) + 1
+	# Ramp music intensity as losses mount (full swell by ~30 captures).
+	_captures_seen += 1
+	GameManager.set_music_intensity(_captures_seen / 30.0)
 	_refresh_forces()
 	var entry = Label.new()
 	entry.text = "%s  %s" % [_rank_display(piece.data.type), piece.data.type]
@@ -618,7 +675,7 @@ func _draw():
 	# During setup, show the player's deployable zone
 	if GameManager.current_state == GameManager.GameState.SETUP:
 		for x in range(BOARD_SIZE):
-			for y in range(6, BOARD_SIZE):
+			for y in range(deploy_start_row, BOARD_SIZE):
 				if _piece_at(Vector2i(x, y)) == null:
 					var rect = Rect2(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
 					draw_rect(rect, Color(0.35, 0.55, 0.95, 0.18))
@@ -631,13 +688,18 @@ func _draw():
 		draw_rect(to_rect, Color(1.0, 0.85, 0.2, 0.9), false, 4.0)
 
 	if GameManager.current_state == GameManager.GameState.PLAYER_TURN:
-		var pulse = 0.55 + 0.25 * sin(_pulse_time * 5.0)
+		var pulse01 = 0.5 + 0.5 * sin(_pulse_time * 5.0)
+		var pulse = 0.55 + 0.25 * (pulse01 * 2.0 - 1.0)
 		for pos in valid_moves:
 			var center = _tile_center(pos)
+			var rect = Rect2(pos.x * TILE_SIZE, pos.y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
 			if _piece_at(pos) != null:
-				# Attack target: red ring
+				# Attack target: glowing red tile + pulsing ring
+				draw_rect(rect, Color(0.95, 0.25, 0.2, 0.10 + 0.10 * pulse01))
 				draw_arc(center, 27.0, 0.0, TAU, 40, Color(0.95, 0.25, 0.2, pulse), 4.0)
 			else:
+				# Reachable tile: soft glow + marker dot
+				draw_rect(rect, Color(0.95, 0.92, 0.55, 0.09 + 0.09 * pulse01))
 				draw_circle(center, 13.0, Color(0.95, 0.92, 0.55, pulse))
 
 		if armed_attack.x >= 0:
@@ -649,8 +711,10 @@ func _draw():
 
 		if selected_piece:
 			var pos = selected_piece.current_grid_pos
-			var rect = Rect2(pos.x * TILE_SIZE + 3, pos.y * TILE_SIZE + 3, TILE_SIZE - 6, TILE_SIZE - 6)
-			draw_rect(rect, Color(1.0, 0.85, 0.2, 0.95), false, 4.0)
+			# Pulse the selection outline so the active piece breathes.
+			var inset = 3.0 + 2.0 * pulse01
+			var rect = Rect2(pos.x * TILE_SIZE + inset, pos.y * TILE_SIZE + inset, TILE_SIZE - inset * 2.0, TILE_SIZE - inset * 2.0)
+			draw_rect(rect, Color(1.0, 0.85, 0.2, 0.7 + 0.25 * pulse01), false, 4.0)
 
 # ---------------------------------------------------------------- setup phase
 
@@ -682,10 +746,16 @@ func _try_deploy_at(pos: Vector2i):
 	_refresh_tray()
 	queue_redraw()
 
+func _roster_total() -> int:
+	var t = 0
+	for c in roster.values():
+		t += c
+	return t
+
 func _player_deploy_positions() -> Array:
 	var empty = []
 	for x in range(BOARD_SIZE):
-		for y in range(6, BOARD_SIZE):
+		for y in range(deploy_start_row, BOARD_SIZE):
 			if grid[x][y] == null:
 				empty.append(Vector2i(x, y))
 	return empty
@@ -696,7 +766,7 @@ func _on_auto_deploy_pressed():
 	var back = []
 	var front = []
 	for pos in empty:
-		if pos.y >= 8:
+		if pos.y >= BOARD_SIZE - 2:
 			back.append(pos)
 		else:
 			front.append(pos)
@@ -732,12 +802,12 @@ func _on_auto_deploy_pressed():
 
 func _on_randomize_pressed():
 	for x in range(BOARD_SIZE):
-		for y in range(6, BOARD_SIZE):
+		for y in range(deploy_start_row, BOARD_SIZE):
 			var piece = _piece_at(Vector2i(x, y))
 			if piece and piece.data.team == GameManager.Team.PLAYER:
 				grid[x][y] = null
 				piece.queue_free()
-	pool_counts = GameManager.REQUIRED_PIECES.duplicate()
+	pool_counts = roster.duplicate()
 	_on_auto_deploy_pressed()
 
 const LAYOUTS_PATH = "user://layouts.cfg"
@@ -745,12 +815,13 @@ const LAYOUTS_PATH = "user://layouts.cfg"
 func _save_layout(slot: int):
 	var pieces = []
 	for x in range(BOARD_SIZE):
-		for y in range(6, BOARD_SIZE):
+		for y in range(deploy_start_row, BOARD_SIZE):
 			var piece = _piece_at(Vector2i(x, y))
 			if piece and piece.data.team == GameManager.Team.PLAYER:
 				pieces.append({"type": piece.data.type, "x": x, "y": y})
-	if pieces.size() != 40:
-		current_turn_label.text = "Place all 40 pieces before saving"
+	var total = _roster_total()
+	if pieces.size() != total:
+		current_turn_label.text = "Place all %d pieces before saving" % total
 		return
 	var cfg = ConfigFile.new()
 	cfg.load(LAYOUTS_PATH)  # ignore error: file may not exist yet
@@ -767,23 +838,23 @@ func _load_layout(slot: int):
 	# Validate: exact required counts, all in bottom 4 rows, unique tiles.
 	var counts = {}
 	var seen = {}
-	var valid = pieces.size() == 40
+	var valid = pieces.size() == _roster_total()
 	for entry in pieces:
 		var pos = Vector2i(entry["x"], entry["y"])
-		if not _in_bounds(pos) or pos.y < 6 or seen.has(pos):
+		if not _in_bounds(pos) or pos.y < deploy_start_row or seen.has(pos):
 			valid = false
 			break
 		seen[pos] = true
 		counts[entry["type"]] = counts.get(entry["type"], 0) + 1
 	if valid:
-		for type in GameManager.REQUIRED_PIECES.keys():
-			if counts.get(type, 0) != GameManager.REQUIRED_PIECES[type]:
+		for type in roster.keys():
+			if counts.get(type, 0) != roster[type]:
 				valid = false
 	if not valid:
 		current_turn_label.text = "Slot %d is empty or invalid" % slot
 		return
 	for x in range(BOARD_SIZE):
-		for y in range(6, BOARD_SIZE):
+		for y in range(deploy_start_row, BOARD_SIZE):
 			var piece = _piece_at(Vector2i(x, y))
 			if piece and piece.data.team == GameManager.Team.PLAYER:
 				grid[x][y] = null
@@ -812,15 +883,17 @@ func _on_start_battle_pressed():
 func _generate_ai_setup():
 	var available_positions = []
 	for x in range(BOARD_SIZE):
-		for y in range(4):
+		for y in range(deploy_rows):
 			available_positions.append(Vector2i(x, y))
 
 	available_positions.shuffle()
 
+	# Enemy back rows (Relic + Wards) are the top ~2 rows of its zone.
+	var back_limit = maxi(0, deploy_rows - 3)
 	var back_positions = []
 	var front_positions = []
 	for pos in available_positions:
-		if pos.y <= 1:
+		if pos.y <= back_limit:
 			back_positions.append(pos)
 		else:
 			front_positions.append(pos)
@@ -836,13 +909,65 @@ func _generate_ai_setup():
 		_spawn_piece(GameManager.Team.ENEMY, type, pos)
 
 	place_piece.call("Relic", true)
-	for i in range(GameManager.REQUIRED_PIECES["Ward"]):
+	for i in range(roster["Ward"]):
 		place_piece.call("Ward", true)
 
-	for type in GameManager.REQUIRED_PIECES.keys():
+	for type in roster.keys():
 		if type != "Relic" and type != "Ward":
-			for i in range(GameManager.REQUIRED_PIECES[type]):
+			for i in range(roster[type]):
 				place_piece.call(type, false)
+
+# Place a puzzle's fixed position and jump straight to the player's turn.
+func _setup_puzzle():
+	var pz = GameManager.current_puzzle()
+	puzzle_mode = true
+	puzzle_goal_moves = pz.get("moves", 1)
+	_puzzle_player_moves = 0
+	var team_map = {"player": GameManager.Team.PLAYER, "enemy": GameManager.Team.ENEMY}
+	for entry in pz["pieces"]:
+		var piece = _spawn_piece(team_map[entry["team"]], entry["type"], Vector2i(entry["x"], entry["y"]))
+		piece.data.is_revealed = true  # tactics are full-information
+		piece._update_visuals()
+	deploy_panel.visible = false
+	captured_panel.visible = false  # roster totals are meaningless in a puzzle
+	history_panel.visible = true
+	GameManager.current_state = GameManager.GameState.PLAYER_TURN
+	var plural = "" if puzzle_goal_moves == 1 else "s"
+	current_turn_label.text = "PUZZLE — %s" % pz["name"]
+	_show_banner("Capture the Relic in %d move%s" % [puzzle_goal_moves, plural], Color.GOLD)
+
+func _show_puzzle_failed():
+	GameManager.play_sfx("defeat")
+	var overlay = ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.7)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	$CanvasLayer.add_child(overlay)
+
+	var vbox = VBoxContainer.new()
+	vbox.set_anchors_preset(Control.PRESET_CENTER)
+	vbox.offset_left = -400
+	vbox.offset_right = 400
+	vbox.offset_top = -160
+	vbox.offset_bottom = 160
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 30)
+	overlay.add_child(vbox)
+
+	var label = Label.new()
+	label.text = "NOT QUITE!"
+	label.add_theme_font_size_override("font_size", 96)
+	label.add_theme_color_override("font_color", Color.CRIMSON)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(label)
+
+	var retry = Button.new()
+	retry.text = "Retry Puzzle"
+	retry.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	retry.add_theme_font_size_override("font_size", 32)
+	retry.pressed.connect(func():
+		GameManager.current_state = GameManager.GameState.SETUP
+		get_tree().reload_current_scene())
+	vbox.add_child(retry)
 
 func _on_piece_dropped(piece):
 	if GameManager.current_state != GameManager.GameState.SETUP:
@@ -936,9 +1061,10 @@ func _calculate_valid_moves(piece) -> Array:
 				else:
 					moves.append(current_check)
 
-	var banned = _banned_square(piece)
-	if banned.x >= 0:
-		moves.erase(banned)
+	if two_square_rule:
+		var banned = _banned_square(piece)
+		if banned.x >= 0:
+			moves.erase(banned)
 	return moves
 
 func _team_has_moves(team) -> bool:
@@ -991,16 +1117,34 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 		bump_tween.tween_property(piece_to_move, "global_position", halfway_pos, GameManager.anim_time(0.2)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		await bump_tween.finished
 
-		# Reveal both ranks for a moment only; they hide again after the
-		# flash, so players have to remember what they saw. The AI records
-		# what it just learned in its own memory.
-		target_tile.flash_reveal(COMBAT_REVEAL_TIME)
-		piece_to_move.flash_reveal(COMBAT_REVEAL_TIME)
+		# Reveal both ranks. By default the reveal is only a flash — they hide
+		# again so players must remember — but the permanent-reveal variant
+		# keeps them face-up. The AI records what it learned either way.
+		if permanent_reveal:
+			target_tile.reveal_permanently()
+			piece_to_move.reveal_permanently()
+		else:
+			target_tile.flash_reveal(COMBAT_REVEAL_TIME)
+			piece_to_move.flash_reveal(COMBAT_REVEAL_TIME)
 		ai.observe_combat(piece_to_move.data, target_tile.data)
 		_show_combat_result(piece_to_move.data, target_tile.data, result)
 		_log_move(is_player, old_pos, target_pos, piece_to_move.data, target_tile.data, result)
 
 		await get_tree().create_timer(GameManager.anim_time(1.0)).timeout
+
+		# Flash the losing piece(s) white and shake the board, then let them
+		# explode. Gives the clash a beat of impact before the smoke.
+		var losers = []
+		if result == "attacker_wins" or result == "game_over":
+			losers = [target_tile]
+		elif result == "defender_wins":
+			losers = [piece_to_move]
+		elif result == "draw":
+			losers = [target_tile, piece_to_move]
+		for loser in losers:
+			loser.hit_flash()
+		_screen_shake(9.0, 0.22)
+		await get_tree().create_timer(GameManager.anim_time(0.25)).timeout
 
 		if result == "attacker_wins" or result == "game_over":
 			_explode_at(target_tile)
@@ -1060,6 +1204,14 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 
 	if GameManager.current_state != GameManager.GameState.GAME_OVER:
 		if is_player:
+			if puzzle_mode:
+				# The winning move already returned via the game_over branch.
+				# Reaching here means this player move did not solve it.
+				_puzzle_player_moves += 1
+				if _puzzle_player_moves >= puzzle_goal_moves:
+					GameManager.current_state = GameManager.GameState.GAME_OVER
+					_show_puzzle_failed()
+					return
 			GameManager.current_state = GameManager.GameState.AI_TURN
 			current_turn_label.text = "Enemy Turn"
 			_show_banner("Enemy Turn", Color.TOMATO)
@@ -1076,7 +1228,11 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 			queue_redraw()
 
 func _explode_at(piece):
-	GameManager.play_sfx("destroyed")
+	# Pitch the destruction cue by whose piece fell: a brighter ring when an
+	# enemy dies, a darker one when you lose a piece — an outcome stinger with
+	# no extra audio assets.
+	var pitch = 1.12 if piece.data.team == GameManager.Team.ENEMY else 0.85
+	GameManager.play_sfx("destroyed", pitch)
 	var explosion = ExplosionScene.instantiate()
 	explosion.global_position = piece.global_position
 	explosion.color = Color.TOMATO if piece.data.team == GameManager.Team.ENEMY else Color.CORNFLOWER_BLUE
@@ -1098,7 +1254,20 @@ func _show_victory_screen(player_won: bool):
 	var overlay = ColorRect.new()
 	overlay.color = Color(0, 0, 0, 0.7)
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.modulate.a = 0.0
 	$CanvasLayer.add_child(overlay)
+	create_tween().tween_property(overlay, "modulate:a", 1.0, 0.35)
+
+	# Defeat: a bloody vignette closes in behind the message.
+	if not player_won:
+		var vignette = ColorRect.new()
+		vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+		vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vignette.material = ShaderMaterial.new()
+		vignette.material.shader = load("res://vignette.gdshader")
+		vignette.modulate.a = 0.0
+		overlay.add_child(vignette)
+		create_tween().tween_property(vignette, "modulate:a", 1.0, 0.8)
 
 	var vbox = VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_CENTER)
@@ -1117,6 +1286,9 @@ func _show_victory_screen(player_won: bool):
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(label)
 
+	# Punch the banner in from oversized so the result lands with weight.
+	_punch_banner(label)
+
 	var again = Button.new()
 	again.text = "Play Again"
 	again.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -1127,20 +1299,33 @@ func _show_victory_screen(player_won: bool):
 	vbox.add_child(again)
 
 	if player_won:
-		for i in range(3):
-			var confetti = ExplosionScene.instantiate()
-			confetti.global_position = Vector2(960, 540)
-			confetti.amount = 200
-			confetti.lifetime = 2.5
-			confetti.spread = 360
-			confetti.initial_velocity_min = 300
-			confetti.initial_velocity_max = 800
-			confetti.scale_amount_min = 10
-			confetti.scale_amount_max = 20
+		var colors = [Color.RED, Color.GREEN, Color.CORNFLOWER_BLUE, Color.GOLD, Color.PURPLE, Color.ORANGE]
+		# A central burst plus two flanking cannons for a fuller celebration.
+		var origins = [Vector2(960, 540), Vector2(360, 760), Vector2(1560, 760)]
+		for j in range(origins.size()):
+			for i in range(colors.size()):
+				var confetti = ExplosionScene.instantiate()
+				confetti.global_position = origins[j]
+				confetti.amount = 220
+				confetti.lifetime = 2.8
+				confetti.spread = 360
+				confetti.initial_velocity_min = 300
+				confetti.initial_velocity_max = 850
+				confetti.scale_amount_min = 10
+				confetti.scale_amount_max = 20
+				confetti.color = colors[i]
+				$CanvasLayer.add_child(confetti)
 
-			var colors = [Color.RED, Color.GREEN, Color.CORNFLOWER_BLUE, Color.GOLD, Color.PURPLE]
-			confetti.color = colors[i % colors.size()]
-			$CanvasLayer.add_child(confetti)
+# Scale-punch a banner in from oversized, settling with a back-ease so the
+# result lands with weight. Pivot is set after layout so it scales from center.
+func _punch_banner(label: Label):
+	await get_tree().process_frame
+	if not is_instance_valid(label):
+		return
+	label.pivot_offset = label.size / 2.0
+	label.scale = Vector2(1.7, 1.7)
+	var tw = create_tween()
+	tw.tween_property(label, "scale", Vector2.ONE, 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 # ---------------------------------------------------------------- rules test
 # `godot --headless --path . -- --rulestest` asserts the ruleset and quits
@@ -1177,6 +1362,13 @@ func _debug_rules_test():
 	_rt_assert(rc.call("Guard", "Knight") == "defender_wins", "lower rank loses")
 	_rt_assert(rc.call("Knight", "Guard") == "attacker_wins", "higher rank wins")
 	_rt_assert(rc.call("Assassin", "Warlord") == "defender_wins", "assassin only beats champion")
+
+	# Rule variant: the deadly Assassin defeats anything it attacks.
+	GameManager.variant_assassin_any = true
+	_rt_assert(rc.call("Assassin", "Warlord") == "attacker_wins", "deadly-assassin variant beats warlord")
+	_rt_assert(rc.call("Assassin", "Ward") == "attacker_wins", "deadly-assassin variant beats ward")
+	GameManager.variant_assassin_any = false
+	_rt_assert(rc.call("Assassin", "Warlord") == "defender_wins", "default assassin still loses to warlord")
 
 	# AI memory: ranks seen in combat are remembered per difficulty.
 	# Hard never forgets; easy rolls to forget each piece every turn.
@@ -1260,5 +1452,39 @@ func _debug_rules_test():
 	_rt_assert(fr.data.is_revealed, "overlapping flash keeps the rank shown")
 	await get_tree().create_timer(0.3).timeout
 	_rt_assert(not fr.data.is_revealed, "extended flash still hides in the end")
+
+	# Legendary lookahead: it must not take the forward advance into a square
+	# where a stronger player piece captures it next turn — the greedy tiers
+	# walk right in for the progress bonus.
+	for x in range(BOARD_SIZE):
+		for y in range(BOARD_SIZE):
+			var pc2 = _piece_at(Vector2i(x, y))
+			if pc2:
+				grid[x][y] = null
+				pc2.queue_free()
+	_spawn_piece(GameManager.Team.ENEMY, "Warlord", Vector2i(5, 4))
+	_spawn_piece(GameManager.Team.PLAYER, "Champion", Vector2i(5, 6))
+	var pre_diff = GameManager.ai_difficulty
+	GameManager.ai_difficulty = "hard"
+	var hard_move = ai.choose_move(self)
+	_rt_assert(hard_move.get("target") == Vector2i(5, 5), "hard AI advances into the trap")
+	GameManager.ai_difficulty = "legendary"
+	var leg_move = ai.choose_move(self)
+	_rt_assert(leg_move.get("target") != Vector2i(5, 5), "legendary AI avoids hanging its warlord")
+	GameManager.ai_difficulty = pre_diff
+
+	# Puzzle mechanic: a clear column lets a Runner strike the enemy Relic for
+	# the game-ending capture (how the mate-in-1 puzzles are solved). Column 0
+	# has no chasm on the classic board.
+	for x in range(BOARD_SIZE):
+		for y in range(BOARD_SIZE):
+			var pc3 = _piece_at(Vector2i(x, y))
+			if pc3:
+				grid[x][y] = null
+				pc3.queue_free()
+	var pr = _spawn_piece(GameManager.Team.PLAYER, "Runner", Vector2i(0, 5))
+	var relic = _spawn_piece(GameManager.Team.ENEMY, "Relic", Vector2i(0, 0))
+	_rt_assert(Vector2i(0, 0) in _calculate_valid_moves(pr), "puzzle: runner can reach the relic")
+	_rt_assert(GameManager.resolve_combat(pr.data, relic.data) == "game_over", "puzzle: capturing the relic wins")
 
 	_rt_finish()

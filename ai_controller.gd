@@ -20,7 +20,8 @@ func knows_rank(data) -> bool:
 	return _known_ranks.has(data.get_instance_id())
 
 func _decay_memory() -> void:
-	if GameManager.ai_difficulty == "hard":
+	# Only easy AI forgets; hard and legendary keep perfect memory.
+	if GameManager.ai_difficulty != "easy":
 		return
 	for key in _known_ranks.keys():
 		if randf() < EASY_FORGET_CHANCE:
@@ -48,7 +49,8 @@ func choose_move(main) -> Dictionary:
 	return best
 
 func _score_move(main, piece, target: Vector2i, relic_pos: Vector2i) -> float:
-	var hard = GameManager.ai_difficulty == "hard"
+	# Legendary shares hard's sharper heuristics, then adds 1-ply lookahead.
+	var hard = GameManager.ai_difficulty != "easy"
 	var score = randf() * (0.15 if hard else 0.4)  # noise so play isn't deterministic
 
 	var defender = main._piece_at(target)
@@ -95,7 +97,67 @@ func _score_move(main, piece, target: Vector2i, relic_pos: Vector2i) -> float:
 		if _adjacent(piece.current_grid_pos, relic_pos) and not _adjacent(target, relic_pos):
 			score -= 6.0 if hard else 3.0
 
+	# Legendary: 1-ply lookahead. Subtract the best capture the player could
+	# make against us right after this move, so it avoids hanging pieces and
+	# exposing the Relic in a way the greedy tiers cannot see.
+	if GameManager.ai_difficulty == "legendary":
+		score -= _retaliation_penalty(main, piece, target)
+
 	return score
+
+# Value of the player's best reply if we commit `piece` to `target`. Uses a
+# reversible edit of main.grid (movegen and resolve_combat are read-only), so
+# no visual state is touched. Only evaluated for moves where we actually end
+# up occupying the target (empty tile or a capture we know we win).
+func _retaliation_penalty(main, piece, target: Vector2i) -> float:
+	var defender = main._piece_at(target)
+	var will_occupy = defender == null
+	if defender != null and knows_rank(defender.data):
+		var r = GameManager.resolve_combat(piece.data, defender.data)
+		will_occupy = r == "attacker_wins" or r == "game_over"
+	if not will_occupy:
+		return 0.0
+
+	var from = piece.current_grid_pos
+	var prev_target_cell = main.grid[target.x][target.y]
+	main.grid[from.x][from.y] = null
+	main.grid[target.x][target.y] = piece
+	piece.current_grid_pos = target
+
+	var gain = _best_player_capture_value(main)
+
+	# Restore exactly.
+	piece.current_grid_pos = from
+	main.grid[from.x][from.y] = piece
+	main.grid[target.x][target.y] = prev_target_cell
+	return gain
+
+# Assumes a full-information player (standard minimax pessimism): the largest
+# value the player could take from us on their immediate next move.
+func _best_player_capture_value(main) -> float:
+	var best = 0.0
+	for x in range(main.BOARD_SIZE):
+		for y in range(main.BOARD_SIZE):
+			var p = main._piece_at(Vector2i(x, y))
+			if p == null or p.data.team != GameManager.Team.PLAYER:
+				continue
+			if p.data.type == "Ward" or p.data.type == "Relic":
+				continue
+			for t in main._calculate_valid_moves(p):
+				var d = main._piece_at(t)
+				if d == null or d.data.team != GameManager.Team.ENEMY:
+					continue
+				var v = 0.0
+				match GameManager.resolve_combat(p.data, d.data):
+					"game_over":
+						v = 1000.0  # player reaching our Relic — never allow it
+					"attacker_wins":
+						v = _piece_value(d.data)
+					"draw":
+						v = _piece_value(d.data) - _piece_value(p.data)
+				if v > best:
+					best = v
+	return best
 
 func _piece_value(data) -> float:
 	if data.type == "Assassin":

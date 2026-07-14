@@ -15,13 +15,40 @@ func _ready():
 	var diff = OptionButton.new()
 	diff.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	diff.custom_minimum_size = Vector2(220, 0)
+	var difficulties = ["easy", "hard", "legendary"]
 	diff.add_item("AI: Easy")
 	diff.add_item("AI: Hard")
-	diff.selected = 1 if GameManager.ai_difficulty == "hard" else 0
+	diff.add_item("AI: Legendary")
+	diff.selected = maxi(0, difficulties.find(GameManager.ai_difficulty))
 	diff.item_selected.connect(func(idx):
-		GameManager.ai_difficulty = "hard" if idx == 1 else "easy"
+		GameManager.ai_difficulty = difficulties[idx]
 		GameManager.save_settings())
 	$CenterBox.add_child(diff)
+
+	var mode = OptionButton.new()
+	mode.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	mode.custom_minimum_size = Vector2(220, 0)
+	# Items: 0 Classic, 1 Blitz, then one entry per puzzle.
+	mode.add_item("Mode: Classic")
+	mode.add_item("Mode: Blitz")
+	for i in range(GameManager.PUZZLES.size()):
+		mode.add_item("Puzzle: %s" % GameManager.PUZZLES[i]["name"])
+	var sel = 0
+	if GameManager.match_mode == "blitz":
+		sel = 1
+	elif GameManager.match_mode == "puzzle":
+		sel = 2 + GameManager.puzzle_index
+	mode.selected = sel
+	mode.item_selected.connect(func(idx):
+		if idx == 0:
+			GameManager.match_mode = "classic"
+		elif idx == 1:
+			GameManager.match_mode = "blitz"
+		else:
+			GameManager.match_mode = "puzzle"
+			GameManager.puzzle_index = idx - 2
+		GameManager.save_settings())
+	$CenterBox.add_child(mode)
 
 	var fast = CheckBox.new()
 	fast.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -31,6 +58,24 @@ func _ready():
 		GameManager.fast_anim = on
 		GameManager.save_settings())
 	$CenterBox.add_child(fast)
+
+	var reveal = CheckBox.new()
+	reveal.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	reveal.text = "Variant: permanent reveal"
+	reveal.button_pressed = GameManager.variant_permanent_reveal
+	reveal.toggled.connect(func(on):
+		GameManager.variant_permanent_reveal = on
+		GameManager.save_settings())
+	$CenterBox.add_child(reveal)
+
+	var deadly = CheckBox.new()
+	deadly.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	deadly.text = "Variant: deadly Assassin"
+	deadly.button_pressed = GameManager.variant_assassin_any
+	deadly.toggled.connect(func(on):
+		GameManager.variant_assassin_any = on
+		GameManager.save_settings())
+	$CenterBox.add_child(deadly)
 
 	# Gentle title pulse
 	var title = $CenterBox/Title
