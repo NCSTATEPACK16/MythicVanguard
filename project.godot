@@ -31,6 +31,10 @@ window/size/viewport_height=1080
 window/stretch/mode="canvas_items"
 window/stretch/aspect="keep"
 
+[gui]
+
+theme/custom_font="res://assets/fonts/MedievalSharp.ttf"
+
 [input_devices]
 
 pointing/emulate_mouse_from_touch=true
