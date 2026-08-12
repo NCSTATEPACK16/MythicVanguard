@@ -1162,6 +1162,9 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 
 	var start_world_pos = piece_to_move.global_position
 	var end_world_pos = _tile_center(target_pos)
+	# All moves are single-axis/orthogonal (see the legality-check directions
+	# array above), so a plain sign() gives the one cardinal direction faced.
+	var move_dir = Vector2i(sign(target_pos.x - old_pos.x), sign(target_pos.y - old_pos.y))
 
 	if target_tile:
 		# Combat
@@ -1170,10 +1173,12 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 		# Slide forward to bump
 		GameManager.play_sfx("clash")
 		piece_to_move.z_index = 50
+		piece_to_move.play_walk(move_dir)
 		var bump_tween = create_tween()
 		var halfway_pos = start_world_pos.lerp(end_world_pos, 0.6)
 		bump_tween.tween_property(piece_to_move, "global_position", halfway_pos, GameManager.anim_time(0.2)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		await bump_tween.finished
+		piece_to_move.play_idle()
 
 		# Reveal both ranks. By default the reveal is only a flash — they hide
 		# again so players must remember — but the permanent-reveal variant
@@ -1209,9 +1214,11 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 			_record_capture(target_tile)
 			target_tile.queue_free()
 
+			piece_to_move.play_walk(move_dir)
 			var land_tween = create_tween()
 			land_tween.tween_property(piece_to_move, "global_position", end_world_pos, GameManager.anim_time(0.15)).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 			await land_tween.finished
+			piece_to_move.play_idle()
 
 			grid[target_pos.x][target_pos.y] = piece_to_move
 			piece_to_move.current_grid_pos = target_pos
@@ -1249,9 +1256,11 @@ func _execute_move(piece_to_move, target_pos: Vector2i, is_player: bool):
 		# Empty tile smooth slide
 		GameManager.play_sfx("move")
 		_log_move(is_player, old_pos, target_pos, null, null, "")
+		piece_to_move.play_walk(move_dir)
 		var slide_tween = create_tween()
 		slide_tween.tween_property(piece_to_move, "global_position", end_world_pos, GameManager.anim_time(0.3)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		await slide_tween.finished
+		piece_to_move.play_idle()
 
 		grid[target_pos.x][target_pos.y] = piece_to_move
 		piece_to_move.current_grid_pos = target_pos

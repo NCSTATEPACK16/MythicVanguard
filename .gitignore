@@ -23,3 +23,7 @@ docs/
 Thumbs.db
 *.bak
 *~
+
+# Python venv for tools/compose.py (LPC character-art pipeline)
+.venv/
+__pycache__/

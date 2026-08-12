@@ -1,0 +1,183 @@
+{
+  "_comment": "Rank -> LPC composition config, approved per docs/asset-plan.md. Keys are the game's real rank names (game_manager.gd RANKS). All sheet_definitions paths are relative to --lpc-root. body_variant is standardized to 'male' across the roster; armor bulk carries the rank escalation instead of body morph. team_accent (when present) names the one lpc_layers key that gets tinted per-team; every other layer renders in its shipped default color (never tinted) -- team identity otherwise comes from piece.tscn's Token panel border alone. board_count is sourced from game_manager.gd REQUIRED_PIECES (classic) / BLITZ_PIECES (blitz).",
+  "Champion": {
+    "walkable": true,
+    "board_count": { "classic": 1, "blitz": 1 },
+    "tier_note": "RANKS=10, Stratego-equivalent: Marshal (highest)",
+    "body_variant": "male",
+    "lpc_layers": {
+      "body": "body/body.json",
+      "head": "head/heads/human/heads_human_male.json",
+      "torso": "torso/armour/torso_armour_plate.json",
+      "legs": "legs/legs_armour.json",
+      "feet": "feet/feet_armour.json",
+      "headwear": "headwear/helmets/helmets/hat_helmet_greathelm.json",
+      "cape_base": "torso/cape/cape_solid.json",
+      "cape_trim": "torso/cape/cape_trim.json",
+      "weapon": "weapons/sword/weapon_sword_longsword.json",
+      "shield": "weapons/shields/heater/shield_heater_wood.json"
+    },
+    "team_accent": { "layer": "cape_base", "player_color": "blue", "enemy_color": "red" }
+  },
+  "Warlord": {
+    "walkable": true,
+    "board_count": { "classic": 1, "blitz": 1 },
+    "tier_note": "RANKS=9, Stratego-equivalent: General",
+    "body_variant": "male",
+    "lpc_layers": {
+      "body": "body/body.json",
+      "head": "head/heads/human/heads_human_male.json",
+      "torso": "torso/armour/torso_armour_plate.json",
+      "legs": "legs/legs_armour.json",
+      "feet": "feet/feet_armour.json",
+      "headwear": "headwear/helmets/helmets/hat_helmet_close.json",
+      "cape": "torso/cape/cape_solid.json",
+      "weapon": "weapons/sword/weapon_sword_longsword.json"
+    },
+    "team_accent": { "layer": "cape", "player_color": "blue", "enemy_color": "red" }
+  },
+  "Commander": {
+    "walkable": true,
+    "board_count": { "classic": 2, "blitz": 1 },
+    "tier_note": "RANKS=8, Stratego-equivalent: Colonel",
+    "body_variant": "male",
+    "lpc_layers": {
+      "body": "body/body.json",
+      "head": "head/heads/human/heads_human_male.json",
+      "torso": "torso/armour/torso_armour_legion.json",
+      "legs": "legs/legs_armour.json",
+      "feet": "feet/feet_armour.json",
+      "headwear": "headwear/helmets/helmets/hat_helmet_close.json",
+      "weapon": "weapons/sword/weapon_sword_arming.json",
+      "shield": { "def": "weapons/shields/shield_kite.json", "variant": "kite gray" }
+    }
+  },
+  "Captain": {
+    "walkable": true,
+    "board_count": { "classic": 3, "blitz": 1 },
+    "tier_note": "RANKS=7, Stratego-equivalent: Major",
+    "body_variant": "male",
+    "lpc_layers": {
+      "body": "body/body.json",
+      "head": "head/heads/human/heads_human_male.json",
+      "torso": "torso/torso_chainmail.json",
+      "legs": "legs/legs_armour.json",
+      "feet": "feet/feet_armour.json",
+      "headwear": "headwear/helmets/helmets/hat_helmet_kettle.json",
+      "waist": "torso/waist/belt_sash.json",
+      "weapon": "weapons/sword/weapon_sword_arming.json"
+    },
+    "team_accent": { "layer": "waist", "player_color": "blue", "enemy_color": "red" }
+  },
+  "Knight": {
+    "walkable": true,
+    "board_count": { "classic": 4, "blitz": 2 },
+    "tier_note": "RANKS=6, Stratego-equivalent: Captain (LPC tier)",
+    "body_variant": "male",
+    "lpc_layers": {
+      "body": "body/body.json",
+      "head": "head/heads/human/heads_human_male.json",
+      "hair": "hair/bald/hair_buzzcut.json",
+      "torso": "torso/torso_chainmail.json",
+      "legs": "legs/legs_armour.json",
+      "feet": "feet/feet_armour.json",
+      "weapon": "weapons/sword/weapon_sword_arming.json"
+    }
+  },
+  "Guard": {
+    "walkable": true,
+    "board_count": { "classic": 4, "blitz": 2 },
+    "tier_note": "RANKS=5, Stratego-equivalent: Lieutenant",
+    "body_variant": "male",
+    "lpc_layers": {
+      "body": "body/body.json",
+      "head": "head/heads/human/heads_human_male.json",
+      "hair": "hair/bald/hair_buzzcut.json",
+      "torso": "torso/armour/torso_armour_leather.json",
+      "legs": "legs/pants/legs_pants.json",
+      "feet": "feet/boots/feet_boots_basic.json",
+      "waist": "torso/waist/belt_sash.json",
+      "weapon": "weapons/polearm/weapon_polearm_halberd.json"
+    },
+    "team_accent": { "layer": "waist", "player_color": "blue", "enemy_color": "red" }
+  },
+  "Scout": {
+    "walkable": true,
+    "board_count": { "classic": 4, "blitz": 2 },
+    "tier_note": "RANKS=4, Stratego-equivalent: Sergeant. NOTE: this is the game's own rank named Scout, NOT the LPC/Stratego 'Scout' archetype (light/fast/dagger) -- that appearance goes to Runner below. Do not swap these two.",
+    "body_variant": "male",
+    "lpc_layers": {
+      "body": "body/body.json",
+      "head": "head/heads/human/heads_human_male.json",
+      "hair": "hair/bald/hair_buzzcut.json",
+      "torso": "torso/armour/torso_armour_leather.json",
+      "legs": "legs/pants/legs_pants.json",
+      "feet": "feet/boots/feet_boots_basic.json",
+      "weapon": "weapons/polearm/weapon_polearm_spear.json"
+    }
+  },
+  "Rogue": {
+    "walkable": true,
+    "board_count": { "classic": 5, "blitz": 2 },
+    "tier_note": "RANKS=3, Stratego-equivalent: Miner",
+    "body_variant": "male",
+    "lpc_layers": {
+      "body": "body/body.json",
+      "head": "head/heads/human/heads_human_male.json",
+      "hair": "hair/bald/hair_buzzcut.json",
+      "torso": "torso/armour/torso_armour_leather.json",
+      "legs": "legs/pants/legs_pants.json",
+      "feet": "feet/boots/feet_boots_basic.json",
+      "weapon": "tools/tool_pickaxe.json"
+    }
+  },
+  "Runner": {
+    "walkable": true,
+    "board_count": { "classic": 8, "blitz": 4 },
+    "tier_note": "RANKS=2, Stratego-equivalent: Scout (light/fast/dagger appearance). NOTE: this pulls the LPC 'Scout' archetype, which is NOT the game's own rank named Scout above. Always write 'Runner -> LPC Scout-tier appearance' to disambiguate.",
+    "body_variant": "male",
+    "lpc_layers": {
+      "body": "body/body.json",
+      "head": "head/heads/human/heads_human_male.json",
+      "torso": "torso/shirts/shortsleeve/torso_clothes_shortsleeve.json",
+      "legs": "legs/pants/legs_pants.json",
+      "feet": "feet/boots/feet_boots_basic.json",
+      "headwear": "headwear/coverings/hoods/hat_hood_cloth.json",
+      "weapon": "weapons/sword/weapon_sword_dagger.json"
+    },
+    "team_accent": { "layer": "torso", "player_color": "blue", "enemy_color": "red" }
+  },
+  "Assassin": {
+    "walkable": true,
+    "board_count": { "classic": 1, "blitz": 1 },
+    "tier_note": "RANKS=1, Stratego-equivalent: Spy",
+    "body_variant": "male",
+    "lpc_layers": {
+      "body": "body/body.json",
+      "head": "head/heads/human/heads_human_male.json",
+      "torso": "torso/armour/torso_armour_leather.json",
+      "legs": "legs/pants/legs_pants.json",
+      "feet": "feet/boots/feet_boots_basic.json",
+      "headwear": "headwear/coverings/hoods/hat_hood_cloth.json",
+      "cape": "torso/cape/cape_tattered.json",
+      "weapon": "weapons/sword/weapon_sword_dagger.json"
+    },
+    "team_accent": { "layer": "cape", "player_color": "blue", "enemy_color": "red" }
+  },
+  "Ward": {
+    "walkable": false,
+    "board_count": { "classic": 6, "blitz": 3 },
+    "tier_note": "RANKS=11, Stratego-equivalent: Bomb (immovable)",
+    "source": "static_prop",
+    "prop_source_path": null,
+    "prop_credit": { "author": null, "license": "CC0", "url": null }
+  },
+  "Relic": {
+    "walkable": false,
+    "board_count": { "classic": 1, "blitz": 1 },
+    "tier_note": "RANKS=0, Stratego-equivalent: Flag (immovable)",
+    "source": "static_prop",
+    "prop_source_path": null,
+    "prop_credit": { "author": null, "license": "CC0", "url": null }
+  }
+}

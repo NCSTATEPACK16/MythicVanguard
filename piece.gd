@@ -25,8 +25,13 @@ const ICON_DARK = Color(0.08, 0.08, 0.14)
 
 @onready var token = $Visuals/Token
 @onready var icon = $Visuals/Icon
+@onready var animated_icon = $Visuals/AnimatedIcon
 @onready var rank_label = $Visuals/RankLabel
 @onready var visuals = $Visuals
+
+# Last direction faced, so play_idle() after a move holds that facing instead
+# of resetting to a default.
+var _facing: String = "down"
 
 func _ready():
 	input_event.connect(_on_input_event)
@@ -99,10 +104,49 @@ func reveal_permanently():
 	data.is_revealed = true
 	_update_visuals()
 
+# Walk-cycle art (from the LPC character-art pipeline) is only wired up for
+# ranks tools/compose.py has actually composited -- GameManager.get_sprite_frames
+# returns null for anything still on the legacy static icon, and _update_visuals
+# falls back to the Sprite2D/Icon path exactly as before for those.
+func play_walk(dir: Vector2i):
+	if not animated_icon.visible or animated_icon.sprite_frames == null:
+		return
+	_facing = _dir_name(dir)
+	var anim = "walk_%s" % _facing
+	if animated_icon.sprite_frames.has_animation(anim):
+		animated_icon.play(anim)
+
+func play_idle():
+	if not animated_icon.visible or animated_icon.sprite_frames == null:
+		return
+	var anim = "idle_%s" % _facing
+	if animated_icon.sprite_frames.has_animation(anim):
+		animated_icon.play(anim)
+
+func _dir_name(dir: Vector2i) -> String:
+	if dir.y < 0:
+		return "up"
+	elif dir.y > 0:
+		return "down"
+	elif dir.x < 0:
+		return "left"
+	else:
+		return "right"
+
 func _update_visuals():
 	if data.is_revealed or data.team == PieceData.Team.PLAYER:
-		icon.texture = data.texture
-		icon.self_modulate = ICON_DARK
+		var frames = GameManager.get_sprite_frames(data.type, data.team)
+		if frames:
+			icon.visible = false
+			animated_icon.visible = true
+			if animated_icon.sprite_frames != frames:
+				animated_icon.sprite_frames = frames
+				animated_icon.play("idle_%s" % _facing)
+		else:
+			icon.visible = true
+			animated_icon.visible = false
+			icon.texture = data.texture
+			icon.self_modulate = ICON_DARK
 		if data.type == "Ward":
 			rank_label.text = "W"
 		elif data.type == "Relic":
@@ -112,6 +156,8 @@ func _update_visuals():
 		rank_label.add_theme_color_override("font_color", ICON_DARK)
 		token.self_modulate = PLAYER_COLOR if data.team == PieceData.Team.PLAYER else ENEMY_COLOR
 	else:
+		icon.visible = true
+		animated_icon.visible = false
 		icon.texture = GameManager.BACK_ICON
 		icon.self_modulate = Color(0.92, 0.78, 0.72)
 		if data.has_moved:
