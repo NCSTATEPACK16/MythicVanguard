@@ -108,6 +108,17 @@ Two tracks. Every item verified via `--rulestest` and/or a driven game screensho
 
 ---
 
+## 🎨 Phase H: Character Art Pipeline — 🚧 IN PROGRESS
+Deterministic, config-driven pipeline replacing the flat SVG piece icons with LPC (Universal LPC Spritesheet Character Generator) pixel-art sprites + real walk-cycle animation. Spec/design log: `docs/asset-plan.md` (gitignored, local-only).
+
+1. **`tools/compose.py` (Python + Pillow):** reads `tools/roster.json` (rank → LPC layer selections, keyed by the game's real rank names — Champion/Warlord/.../Relic, not generic Stratego names) and the LPC generator checkout's `sheet_definitions`/`spritesheets`, alpha-composites in JSON-declared z-order, handles both of LPC's color mechanisms (literal per-color folders and palette-swap recoloring, the latter via nearest-color match — some shipped LPC assets drift a few RGB units off their documented palette hex). Emits `assets/manifest.json` and auto-appends an LPC credits block to `CREDITS.md` (between `<!-- LPC-CREDITS:BEGIN/END -->` markers, never touching the hand-written sections above it). Deterministic: re-running with unchanged inputs reproduces byte-identical output.
+2. **Composited:** all 10 mobile ranks × 2 teams (20 sheets, `assets/characters/`). `Ward`/`Relic` are static props still pending a CC0 source pick — `compose.py` skips them gracefully rather than failing.
+3. **Engine wiring:** `piece.tscn` gained a `Visuals/AnimatedIcon` (`AnimatedSprite2D`) alongside the original `Icon` (`Sprite2D`, kept — still handles `BACK_ICON` for hidden pieces and any rank `compose.py` hasn't composited yet, so this is a safe additive fallback, not a replacement). `GameManager.get_sprite_frames(type, team)` lazily builds/caches a `SpriteFrames` from the manifest; `piece.gd::play_walk(dir)`/`play_idle()` are no-ops whenever the piece is showing its hidden back-icon, so `main.gd::_execute_move()` can call them unconditionally around its existing bump/land/slide tweens.
+4. **Validated live:** `godot --path . -- --screenshot --autodeploy --aitest` — composited ranks render correctly with team coloring, hidden enemy pieces show only the plain back-icon (no animation leak), uncomposited ranks (Ward/Relic) cleanly fall back to their original SVG icons. All existing `--rulestest` cases still pass.
+5. **Not yet done:** Ward/Relic static-prop sourcing + compositing, a full-roster live playtest (Classic + Blitz), and graduating the approved `docs/asset-plan.md` content into a committed root-level `PIPELINE.md` with one-command regen instructions.
+
+---
+
 ## 🧪 Dev Testing Flags
 Run the game with user args (after `--`) for automated checks:
 - `godot --path . -- --screenshot` — boots to the deploy screen, saves `user://screenshot.png`, quits.

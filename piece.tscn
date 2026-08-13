@@ -40,6 +40,9 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_token1")
 [node name="Icon" type="Sprite2D" parent="Visuals"]
 scale = Vector2(0.082, 0.082)
 
+[node name="AnimatedIcon" type="AnimatedSprite2D" parent="Visuals"]
+visible = false
+
 [node name="RankLabel" type="Label" parent="Visuals"]
 offset_left = 2.0
 offset_top = 4.0

@@ -1,0 +1,478 @@
+{
+  "frame_size": [
+    64,
+    64
+  ],
+  "ranks": {
+    "Assassin": {
+      "enemy": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/assassin_enemy.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "player": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/assassin_player.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "walkable": true
+    },
+    "Captain": {
+      "enemy": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/captain_enemy.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "player": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/captain_player.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "walkable": true
+    },
+    "Champion": {
+      "enemy": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/champion_enemy.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "player": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/champion_player.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "walkable": true
+    },
+    "Commander": {
+      "enemy": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/commander_enemy.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "player": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/commander_player.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "walkable": true
+    },
+    "Guard": {
+      "enemy": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/guard_enemy.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "player": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/guard_player.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "walkable": true
+    },
+    "Knight": {
+      "enemy": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/knight_enemy.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "player": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/knight_player.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "walkable": true
+    },
+    "Rogue": {
+      "enemy": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/rogue_enemy.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "player": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/rogue_player.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "walkable": true
+    },
+    "Runner": {
+      "enemy": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/runner_enemy.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "player": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/runner_player.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "walkable": true
+    },
+    "Scout": {
+      "enemy": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/scout_enemy.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "player": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/scout_player.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "walkable": true
+    },
+    "Warlord": {
+      "enemy": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/warlord_enemy.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "player": {
+        "fps": 10,
+        "idle_col": 0,
+        "rows": {
+          "down": 2,
+          "left": 1,
+          "right": 3,
+          "up": 0
+        },
+        "sheet": "res://assets/characters/warlord_player.png",
+        "walk_cols": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "walkable": true
+    }
+  }
+}

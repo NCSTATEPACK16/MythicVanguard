@@ -262,6 +262,71 @@ const PIECE_ICONS = {
 }
 const BACK_ICON = preload("res://assets/pieces/back.svg")
 
+# LPC character-art pipeline (tools/compose.py). Only ranks present in
+# assets/manifest.json have walk-cycle art; everything else keeps using
+# PIECE_ICONS above until compose.py has composited it too.
+var _manifest: Dictionary = {}
+var _manifest_loaded: bool = false
+var _sprite_frames_cache: Dictionary = {}
+
+func _load_manifest():
+	if _manifest_loaded:
+		return
+	_manifest_loaded = true
+	var f = FileAccess.open("res://assets/manifest.json", FileAccess.READ)
+	if f == null:
+		return
+	var parsed = JSON.parse_string(f.get_as_text())
+	if parsed is Dictionary:
+		_manifest = parsed
+
+# Returns a cached SpriteFrames with walk_<dir>/idle_<dir> animations for a
+# rank+team, or null if that rank hasn't been composited yet (see above).
+func get_sprite_frames(type: String, team: Team) -> SpriteFrames:
+	_load_manifest()
+	var cache_key = "%s_%d" % [type, team]
+	if _sprite_frames_cache.has(cache_key):
+		return _sprite_frames_cache[cache_key]
+
+	var ranks = _manifest.get("ranks", {})
+	if not ranks.has(type) or not ranks[type].get("walkable", false):
+		return null
+	var team_key = "player" if team == Team.PLAYER else "enemy"
+	var entry = ranks[type].get(team_key)
+	if entry == null:
+		return null
+	var texture: Texture2D = load(entry["sheet"])
+	if texture == null:
+		return null
+
+	var frame_size = _manifest["frame_size"]
+	var frame_w = int(frame_size[0])
+	var frame_h = int(frame_size[1])
+	var fps = entry.get("fps", 10)
+	var frames = SpriteFrames.new()
+	for dir in entry["rows"].keys():
+		var row = int(entry["rows"][dir])
+		var walk_anim = "walk_%s" % dir
+		frames.add_animation(walk_anim)
+		frames.set_animation_speed(walk_anim, fps)
+		frames.set_animation_loop(walk_anim, true)
+		for col in entry["walk_cols"]:
+			frames.add_frame(walk_anim, _atlas_frame(texture, int(col), row, frame_w, frame_h))
+
+		var idle_anim = "idle_%s" % dir
+		frames.add_animation(idle_anim)
+		frames.set_animation_loop(idle_anim, false)
+		frames.add_frame(idle_anim, _atlas_frame(texture, int(entry["idle_col"]), row, frame_w, frame_h))
+
+	_sprite_frames_cache[cache_key] = frames
+	return frames
+
+func _atlas_frame(texture: Texture2D, col: int, row: int, w: int, h: int) -> AtlasTexture:
+	var atlas = AtlasTexture.new()
+	atlas.atlas = texture
+	atlas.region = Rect2(col * w, row * h, w, h)
+	return atlas
+
 func create_piece_data(team: Team, type: String) -> PieceData:
 	var data = PieceData.new()
 	data.team = team
