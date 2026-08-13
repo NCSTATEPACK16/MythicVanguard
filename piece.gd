@@ -22,6 +22,7 @@ const PLAYER_COLOR = Color(0.45, 0.62, 0.95)
 const ENEMY_COLOR = Color(0.95, 0.45, 0.4)
 const HIDDEN_COLOR = Color(0.32, 0.2, 0.26)
 const ICON_DARK = Color(0.08, 0.08, 0.14)
+const ICON_SVG_SCALE = Vector2(0.082, 0.082)
 
 @onready var token = $Visuals/Token
 @onready var icon = $Visuals/Icon
@@ -146,7 +147,16 @@ func _update_visuals():
 			icon.visible = true
 			animated_icon.visible = false
 			icon.texture = data.texture
-			icon.self_modulate = ICON_DARK
+			# Ward/Relic use full-color composited prop art (tools/compose.py) at the
+			# token's native 64x64, not the flat single-tone line icons the scene's
+			# default Icon scale/ICON_DARK tint were tuned for -- both need to be
+			# reset per-type or the new art renders pixel-sized and near-black.
+			if data.type in ["Ward", "Relic"]:
+				icon.self_modulate = Color.WHITE
+				icon.scale = Vector2.ONE
+			else:
+				icon.self_modulate = ICON_DARK
+				icon.scale = ICON_SVG_SCALE
 		if data.type == "Ward":
 			rank_label.text = "W"
 		elif data.type == "Relic":
