@@ -169,15 +169,15 @@
     "board_count": { "classic": 6, "blitz": 3 },
     "tier_note": "RANKS=11, Stratego-equivalent: Bomb (immovable)",
     "source": "static_prop",
-    "prop_source_path": null,
-    "prop_credit": { "author": null, "license": "CC0", "url": null }
+    "prop_source_path": "tools/prop_sources/ward.png",
+    "prop_credit": { "author": "Movicx", "license": "CC-BY 4.0", "url": "https://opengameart.org/content/treasure-chest-4" }
   },
   "Relic": {
     "walkable": false,
     "board_count": { "classic": 1, "blitz": 1 },
     "tier_note": "RANKS=0, Stratego-equivalent: Flag (immovable)",
     "source": "static_prop",
-    "prop_source_path": null,
-    "prop_credit": { "author": null, "license": "CC0", "url": null }
+    "prop_source_path": "tools/prop_sources/relic.png",
+    "prop_credit": { "author": "7Soul1, curated CC0 by AntumDeluge", "license": "CC0", "url": "https://opengameart.org/content/cc0-gem-icons" }
   }
 }

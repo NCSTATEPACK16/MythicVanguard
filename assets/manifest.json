@@ -286,6 +286,18 @@
       },
       "walkable": true
     },
+    "Relic": {
+      "shared": {
+        "fps": 0,
+        "idle_col": 0,
+        "rows": {
+          "down": 0
+        },
+        "sheet": "res://assets/props/relic.png",
+        "walk_cols": []
+      },
+      "walkable": false
+    },
     "Rogue": {
       "enemy": {
         "fps": 10,
@@ -426,6 +438,18 @@
         ]
       },
       "walkable": true
+    },
+    "Ward": {
+      "shared": {
+        "fps": 0,
+        "idle_col": 0,
+        "rows": {
+          "down": 0
+        },
+        "sheet": "res://assets/props/ward.png",
+        "walk_cols": []
+      },
+      "walkable": false
     },
     "Warlord": {
       "enemy": {

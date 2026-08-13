@@ -257,8 +257,8 @@ const PIECE_ICONS = {
 	"Rogue": preload("res://assets/pieces/rogue.svg"),
 	"Runner": preload("res://assets/pieces/runner.svg"),
 	"Assassin": preload("res://assets/pieces/assassin.svg"),
-	"Ward": preload("res://assets/pieces/ward.svg"),
-	"Relic": preload("res://assets/pieces/relic.svg")
+	"Ward": preload("res://assets/props/ward.png"),
+	"Relic": preload("res://assets/props/relic.png")
 }
 const BACK_ICON = preload("res://assets/pieces/back.svg")
 
